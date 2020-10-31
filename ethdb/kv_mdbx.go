@@ -1245,7 +1245,7 @@ func (c *MdbxCursor) PutCurrent(key []byte, value []byte) error {
 		key = key[:b.DupToLen]
 	}
 
-	if c.bucketName == dbutils.PlainStateBucket && bytes.Contains(value, xv) {
+	if c.bucketName == dbutils.PlainStateBucket {
 		fmt.Printf("PUT current4: %x, %x\n", key, value)
 	}
 
