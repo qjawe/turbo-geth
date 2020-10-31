@@ -14,7 +14,6 @@ import (
 	"time"
 
 	"github.com/c2h5oh/datasize"
-	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/ethdb/mdbx"
 	"github.com/ledgerwatch/turbo-geth/log"
@@ -479,11 +478,6 @@ func (tx *mdbxTx) CreateBucket(name string) error {
 	cnfCopy.DBI = dbutils.DBI(dbi)
 	tx.db.buckets[name] = cnfCopy
 
-	if name == dbutils.PlainStateBucket {
-		a, _ := tx.Cursor(dbutils.PlainStateBucket).Count()
-		fmt.Printf("count: %d\n", a)
-	}
-
 	return nil
 }
 
@@ -546,7 +540,6 @@ func (tx *mdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 		txn.RawRead = true
 		tx.tx = txn
 	}
-	fmt.Printf("DropL %s\n", name)
 	if err := tx.tx.Drop(mdbx.DBI(dbi), true); err != nil {
 		return err
 	}
@@ -579,9 +572,6 @@ func (tx *mdbxTx) ExistsBucket(bucket string) bool {
 }
 
 func (tx *mdbxTx) Commit(ctx context.Context) error {
-	a, _ := tx.Cursor(dbutils.PlainStateBucket).Count()
-	fmt.Printf("count before commit: %d\n", a)
-
 	if tx.db.env == nil {
 		return fmt.Errorf("db closed")
 	}
@@ -1156,9 +1146,6 @@ func (c *MdbxCursor) Put(key []byte, value []byte) error {
 			return err
 		}
 	}
-	if bytes.HasPrefix(key, x) {
-		fmt.Printf("Put01: %x, %x\n", key, value)
-	}
 
 	b := c.bucketCfg
 	if b.AutoDupSortKeysConversion {
@@ -1167,9 +1154,6 @@ func (c *MdbxCursor) Put(key []byte, value []byte) error {
 
 	return c.put(key, value)
 }
-
-var x = common.FromHex("cde4de4d3baa9f2cb0253de1b86271152fbf786400")
-var xv = common.FromHex("0209a349d36d80ec578000")
 
 func (c *MdbxCursor) putDupSort(key []byte, value []byte) error {
 	b := c.bucketCfg
@@ -1187,10 +1171,6 @@ func (c *MdbxCursor) putDupSort(key []byte, value []byte) error {
 			return err
 		}
 
-		if c.bucketName == dbutils.PlainStateBucket {
-			fmt.Printf("PUT1: %x, %x\n", key, value)
-			fmt.Printf("PUT1: %d, %d\n", from, to)
-		}
 		return nil
 	}
 
@@ -1199,10 +1179,6 @@ func (c *MdbxCursor) putDupSort(key []byte, value []byte) error {
 	_, v, err := c.getBothRange(key, value[:from-to])
 	if err != nil { // if key not found, or found another one - then just insert
 		if mdbx.IsNotFound(err) {
-			if c.bucketName == dbutils.PlainStateBucket {
-				fmt.Printf("PUT2: %x, %x\n", key, value)
-				fmt.Printf("PUT2: %d, %d\n", from, to)
-			}
 			return c.put(key, value)
 		}
 		return err
@@ -1210,10 +1186,6 @@ func (c *MdbxCursor) putDupSort(key []byte, value []byte) error {
 
 	if bytes.Equal(v[:from-to], value[:from-to]) {
 		if len(v) == len(value) { // in DupSort case mdbx.Current works only with values of same length
-			if c.bucketName == dbutils.PlainStateBucket {
-				fmt.Printf("PUT3: %x, %x\n", key, value)
-				fmt.Printf("PUT3: %d, %d\n", from, to)
-			}
 			return c.putCurrent(key, value)
 		}
 		err = c.delCurrent()
@@ -1222,10 +1194,6 @@ func (c *MdbxCursor) putDupSort(key []byte, value []byte) error {
 		}
 	}
 
-	if c.bucketName == dbutils.PlainStateBucket {
-		fmt.Printf("PUT4: %x, %x\n", key, value)
-		fmt.Printf("PUT4: %d, %d\n", from, to)
-	}
 	return c.put(key, value)
 }
 
@@ -1243,10 +1211,6 @@ func (c *MdbxCursor) PutCurrent(key []byte, value []byte) error {
 	if b.AutoDupSortKeysConversion && len(key) == b.DupFromLen {
 		value = append(key[b.DupToLen:], value...)
 		key = key[:b.DupToLen]
-	}
-
-	if c.bucketName == dbutils.PlainStateBucket {
-		fmt.Printf("PUT current4: %x, %x\n", key, value)
 	}
 
 	return c.putCurrent(key, value)
@@ -1300,10 +1264,6 @@ func (c *MdbxCursor) Append(k []byte, v []byte) error {
 	}
 	b := c.bucketCfg
 	if b.AutoDupSortKeysConversion {
-		if c.bucketName == dbutils.PlainStateBucket {
-			fmt.Printf("APPEND reformat before: %x, %x, %d\n", k, v, len(k))
-		}
-
 		from, to := b.DupFromLen, b.DupToLen
 		if len(k) != from && len(k) >= to {
 			return fmt.Errorf("dupsort bucket: %s, can have keys of len==%d and len<%d. key: %x", c.bucketName, from, to, k)
@@ -1313,20 +1273,10 @@ func (c *MdbxCursor) Append(k []byte, v []byte) error {
 			v = append(k[to:], v...)
 			k = k[:to]
 		}
-		if c.bucketName == dbutils.PlainStateBucket {
-			fmt.Printf("APPEND reformat after: %x, %x, %d, %d\n", k, v, from, to)
-		}
 	}
 
 	if b.Flags&mdbx.DupSort != 0 {
-		if c.bucketName == dbutils.PlainStateBucket {
-			fmt.Printf("APPEND1: %x, %x\n", k, v)
-		}
-		return c.appendDup(common.CopyBytes(k), common.CopyBytes(v))
-	}
-
-	if c.bucketName == dbutils.PlainStateBucket {
-		fmt.Printf("APPEND2: %x, %x\n", k, v)
+		return c.appendDup(k, v)
 	}
 	return c.append(k, v)
 }
