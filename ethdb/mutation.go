@@ -130,7 +130,7 @@ func (m *mutation) Put(table string, key []byte, value []byte) error {
 	m.mu.Lock()
 	defer m.mu.Unlock()
 
-	newMi := &MutationItem{table: table, key: key, value: value}
+	newMi := &MutationItem{table: table, key: common.CopyBytes(key), value: common.CopyBytes(value)}
 	i := m.puts.ReplaceOrInsert(newMi)
 	m.size += int(unsafe.Sizeof(newMi)) + len(key) + len(value)
 	if i != nil {
@@ -141,7 +141,7 @@ func (m *mutation) Put(table string, key []byte, value []byte) error {
 }
 
 func (m *mutation) Append(table string, key []byte, value []byte) error {
-	return m.Put(table, key, value)
+	return m.Put(table, common.CopyBytes(key), common.CopyBytes(value))
 }
 
 func (m *mutation) MultiPut(tuples ...[]byte) (uint64, error) {
@@ -188,7 +188,7 @@ func (m *mutation) Delete(table string, k, v []byte) error {
 		return m.db.Delete(table, k, v) // TODO: mutation to support DupSort deletes
 	}
 	//m.puts.Delete(table, k)
-	return m.Put(table, k, nil)
+	return m.Put(table, common.CopyBytes(k), nil)
 }
 
 func (m *mutation) CommitAndBegin(ctx context.Context) error {
