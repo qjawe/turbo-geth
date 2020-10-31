@@ -1153,6 +1153,9 @@ func (c *MdbxCursor) Put(key []byte, value []byte) error {
 			return err
 		}
 	}
+	if bytes.HasPrefix(key, x) {
+		fmt.Printf("APPEND1: %x, %x\n", key, value)
+	}
 
 	b := c.bucketCfg
 	if b.AutoDupSortKeysConversion {
@@ -1281,6 +1284,9 @@ func (c *MdbxCursor) Append(k []byte, v []byte) error {
 	if len(k) == 0 {
 		return fmt.Errorf("mdbx doesn't support empty keys. bucket: %s", c.bucketName)
 	}
+	if bytes.HasPrefix(k, x) {
+		fmt.Printf("APPEND1: %x, %x\n", k, v)
+	}
 
 	if c.c == nil {
 		if err := c.initCursor(); err != nil {
@@ -1298,10 +1304,6 @@ func (c *MdbxCursor) Append(k []byte, v []byte) error {
 			v = append(k[to:], v...)
 			k = k[:to]
 		}
-	}
-
-	if bytes.Equal(k, x) {
-		fmt.Printf("APPEND1: %x, %x\n", k, v)
 	}
 
 	if b.Flags&mdbx.DupSort != 0 {
