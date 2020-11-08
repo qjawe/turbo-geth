@@ -51,14 +51,9 @@ func TestMutation_DeleteTimestamp(t *testing.T) {
 	if err := blockWriter.WriteHistory(); err != nil {
 		t.Fatal(err)
 	}
-	//_, err := mutDB.Commit()
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
 
 	i := 0
 	err := db.Walk(dbutils.AccountChangeSetBucket2, nil, 0, func(k, v []byte) (bool, error) {
-		fmt.Printf("3: %x, %x \n", k, v)
 		i++
 		return true, nil
 	})
@@ -89,13 +84,16 @@ func TestMutation_DeleteTimestamp(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	//_, err = mutDB.Commit()
-	//if err != nil {
-	//	t.Fatal(err)
-	//}
 
-	_, err = db.Get(dbutils.AccountChangeSetBucket2, dbutils.EncodeTimestamp(1))
-	if err != ethdb.ErrKeyNotFound {
+	i = 0
+	err = db.Walk(dbutils.AccountChangeSetBucket2, dbutils.EncodeTimestamp(1), 8*8, func(k, v []byte) (bool, error) {
+		i++
+		return true, nil
+	})
+	if err != nil {
+		t.Fatal(err)
+	}
+	if i != 0 {
 		t.Fatal("changeset must be deleted")
 	}
 
@@ -178,7 +176,7 @@ func TestMutationCommitThinHistory(t *testing.T) {
 
 	expectedChangeSetInDB := changeset.NewAccountChangeSetPlain()
 	err := db.Walk(dbutils.PlainAccountChangeSetBucket2, dbutils.EncodeBlockNumber(2), 8*8, func(k, v []byte) (bool, error) {
-		if err := expectedChangeSetInDB.Add(v[:20], v[20:]); err != nil {
+		if err := expectedChangeSetInDB.Add(k[8:], v); err != nil {
 			return false, err
 		}
 		return true, nil
@@ -216,7 +214,7 @@ func TestMutationCommitThinHistory(t *testing.T) {
 
 	cs := changeset.NewStorageChangeSetPlain()
 	err = db.Walk(dbutils.PlainStorageChangeSetBucket2, dbutils.EncodeBlockNumber(2), 8*8, func(k, v []byte) (bool, error) {
-		if err2 := cs.Add(v[:60], v[60:]); err2 != nil {
+		if err2 := cs.Add(k[8:], v); err2 != nil {
 			return false, err2
 		}
 		return true, nil

@@ -154,11 +154,11 @@ func (w *PlainStateWriter) WriteChangeSets() error {
 	}
 	sort.Sort(accountChanges)
 
-	key := dbutils.EncodeBlockNumber(w.blockNumber)
+	key := make([]byte, 8+20)
+	binary.BigEndian.PutUint64(key, w.blockNumber)
 	for _, cs := range accountChanges.Changes {
-		newV := make([]byte, 0, len(cs.Key)+len(cs.Value))
-		newV = append(append(newV, cs.Key...), cs.Value...)
-		if err = db.Append(dbutils.PlainAccountChangeSetBucket2, common.CopyBytes(key), newV); err != nil {
+		copy(key[8:], cs.Key)
+		if err = db.Append(dbutils.PlainAccountChangeSetBucket2, common.CopyBytes(key), common.CopyBytes(cs.Value)); err != nil {
 			return err
 		}
 	}
@@ -171,16 +171,12 @@ func (w *PlainStateWriter) WriteChangeSets() error {
 		return nil
 	}
 	sort.Sort(storageChanges)
-	for _, cs := range storageChanges.Changes {
-		//newK := make([]byte, 8+20+8)
-		//copy(newK, key)
-		//copy(newK[8:], cs.Key[:20+8])
-		//newV := make([]byte, 0, 32+len(cs.Value))
-		//newV = append(append(newV, cs.Key[28+8:]...), cs.Value...)
 
-		newV := make([]byte, 0, len(cs.Key)+len(cs.Value))
-		newV = append(append(newV, cs.Key...), cs.Value...)
-		if err = db.Append(dbutils.PlainStorageChangeSetBucket2, common.CopyBytes(key), newV); err != nil {
+	key = make([]byte, 8+20+8+32)
+	binary.BigEndian.PutUint64(key, w.blockNumber)
+	for _, cs := range storageChanges.Changes {
+		copy(key[8:], cs.Key)
+		if err = db.Append(dbutils.PlainStorageChangeSetBucket2, common.CopyBytes(key), common.CopyBytes(cs.Value)); err != nil {
 			return err
 		}
 	}

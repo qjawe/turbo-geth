@@ -133,7 +133,7 @@ func (opts LmdbOpts) Open() (kv KV, err error) {
 		}
 	}
 
-	var flags uint = 0 // lmdb.NoReadahead
+	var flags uint = lmdb.NoReadahead
 	if opts.readOnly {
 		flags |= lmdb.Readonly
 	}
@@ -144,8 +144,6 @@ func (opts LmdbOpts) Open() (kv KV, err error) {
 
 	var exclusiveLock fileutil.Releaser
 	if opts.exclusive {
-		flags |= lmdb.WriteMap
-
 		exclusiveLock, _, err = fileutil.Flock(path.Join(opts.path, "LOCK"))
 		if err != nil {
 			return nil, fmt.Errorf("failed exclusive Flock for lmdb, path=%s: %w", opts.path, err)

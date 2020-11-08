@@ -78,7 +78,7 @@ func FindByHistory(tx ethdb.Tx, storage bool, key []byte, timestamp uint64) ([]b
 			return []byte{}, nil
 		}
 		csBucket, _ := dbutils.ChangeSetByIndexBucket(storage)
-		c := tx.CursorDupSort(csBucket)
+		c := tx.Cursor(csBucket)
 		defer c.Close()
 		var err error
 		if storage {
@@ -747,8 +747,8 @@ func (csd *changesetSearchDecorator) buildChangeset(from, to uint64) error {
 	}
 
 	mp := make(map[string][]byte)
-	err := csd.csWalker.WalkReverse(from, to, func(bN, k, v []byte) error {
-		replace := binary.BigEndian.Uint64(bN) >= csd.timestamp
+	err := csd.csWalker.WalkReverse(from, to, func(blockN uint64, k, v []byte) error {
+		replace := blockN >= csd.timestamp
 		if replace {
 			mp[string(k)] = v
 		}

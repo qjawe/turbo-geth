@@ -17,8 +17,8 @@ type Walker interface {
 }
 
 type Walker2 interface {
-	Walk(from, to uint64, f func(kk, k, v []byte) error) error
-	WalkReverse(from, to uint64, f func(kk, k, v []byte) error) error
+	Walk(from, to uint64, f func(blockN uint64, k, v []byte) error) error
+	WalkReverse(from, to uint64, f func(blockN uint64, k, v []byte) error) error
 	Find(blockNumber uint64, k []byte) ([]byte, error)
 }
 
@@ -122,7 +122,7 @@ func Len(b []byte) int {
 var Mapper = map[string]struct {
 	IndexBucket    string
 	WalkerAdapter  func(v []byte) Walker
-	WalkerAdapter2 func(cursor ethdb.CursorDupSort) Walker2
+	WalkerAdapter2 func(cursor ethdb.Cursor) Walker2
 	KeySize        int
 	Template       string
 	New            func() *ChangeSet
@@ -133,7 +133,7 @@ var Mapper = map[string]struct {
 		WalkerAdapter: func(v []byte) Walker {
 			return AccountChangeSetBytes(v)
 		},
-		WalkerAdapter2: func(c ethdb.CursorDupSort) Walker2 {
+		WalkerAdapter2: func(c ethdb.Cursor) Walker2 {
 			return AccountChangeSet{c: c}
 		},
 		KeySize:  common.HashLength,
@@ -146,7 +146,7 @@ var Mapper = map[string]struct {
 		WalkerAdapter: func(v []byte) Walker {
 			return StorageChangeSetBytes(v)
 		},
-		WalkerAdapter2: func(c ethdb.CursorDupSort) Walker2 {
+		WalkerAdapter2: func(c ethdb.Cursor) Walker2 {
 			return StorageChangeSet{c: c}
 		},
 		KeySize:  common.HashLength*2 + common.IncarnationLength,
@@ -159,7 +159,7 @@ var Mapper = map[string]struct {
 		WalkerAdapter: func(v []byte) Walker {
 			return AccountChangeSetPlainBytes(v)
 		},
-		WalkerAdapter2: func(c ethdb.CursorDupSort) Walker2 {
+		WalkerAdapter2: func(c ethdb.Cursor) Walker2 {
 			return AccountChangeSetPlain{c: c}
 		},
 		KeySize:  common.AddressLength,
@@ -172,7 +172,7 @@ var Mapper = map[string]struct {
 		WalkerAdapter: func(v []byte) Walker {
 			return StorageChangeSetPlainBytes(v)
 		},
-		WalkerAdapter2: func(c ethdb.CursorDupSort) Walker2 {
+		WalkerAdapter2: func(c ethdb.Cursor) Walker2 {
 			return StorageChangeSetPlain{c: c}
 		},
 		KeySize:  common.AddressLength + common.IncarnationLength + common.HashLength,

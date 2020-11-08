@@ -40,18 +40,18 @@ func (b AccountChangeSetBytes) Find(k []byte) ([]byte, error) {
 	return findInAccountChangeSetBytes(b, k, common.HashLength)
 }
 
-type AccountChangeSet struct{ c ethdb.CursorDupSort }
+type AccountChangeSet struct{ c ethdb.Cursor }
 
-func (b AccountChangeSet) WalkReverse(from, to uint64, f func(kk, k, v []byte) error) error {
-	return walkReverse(b.c, from, to, common.HashLength, f)
+func (b AccountChangeSet) WalkReverse(from, to uint64, f func(blockN uint64, k, v []byte) error) error {
+	return walkReverse(b.c, from, to, f)
 }
 
-func (b AccountChangeSet) Walk(from, to uint64, f func(kk, k, v []byte) error) error {
-	return walk(b.c, from, to, common.HashLength, f)
+func (b AccountChangeSet) Walk(from, to uint64, f func(blockN uint64, k, v []byte) error) error {
+	return walk(b.c, from, to, f)
 }
 
 func (b AccountChangeSet) Find(blockNumber uint64, k []byte) ([]byte, error) {
-	return findInAccountChangeSet(b.c, blockNumber, k, common.HashLength)
+	return findInAccountChangeSet(b.c, blockNumber, k)
 }
 
 /* Plain changesets (key is a common.Address) */
@@ -76,18 +76,18 @@ func DecodeAccountsPlain(b []byte) (*ChangeSet, error) {
 	return h, nil
 }
 
-type AccountChangeSetPlain struct{ c ethdb.CursorDupSort }
+type AccountChangeSetPlain struct{ c ethdb.Cursor }
 
-func (b AccountChangeSetPlain) WalkReverse(from, to uint64, f func(kk, k, v []byte) error) error {
-	return walkReverse(b.c, from, to, common.AddressLength, f)
+func (b AccountChangeSetPlain) WalkReverse(from, to uint64, f func(blockN uint64, k, v []byte) error) error {
+	return walkReverse(b.c, from, to, f)
 }
 
-func (b AccountChangeSetPlain) Walk(from, to uint64, f func(kk, k, v []byte) error) error {
-	return walk(b.c, from, to, common.AddressLength, f)
+func (b AccountChangeSetPlain) Walk(from, to uint64, f func(blockN uint64, k, v []byte) error) error {
+	return walk(b.c, from, to, f)
 }
 
 func (b AccountChangeSetPlain) Find(blockNumber uint64, k []byte) ([]byte, error) {
-	return findInAccountChangeSet(b.c, blockNumber, k, common.AddressLength)
+	return findInAccountChangeSet(b.c, blockNumber, k)
 }
 
 type AccountChangeSetPlainBytes []byte

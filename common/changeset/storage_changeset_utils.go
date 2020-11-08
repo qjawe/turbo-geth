@@ -475,7 +475,7 @@ type contractKeys struct {
 	Vals        [][]byte
 }
 
-func walkReverse(c ethdb.CursorDupSort, from, to uint64, keyPrefixLen int, f func(kk, k, v []byte) error) error {
+func walkReverse(c ethdb.Cursor, from, to uint64, f func(blockN uint64, k, v []byte) error) error {
 	_, _, err := c.Seek(dbutils.EncodeBlockNumber(to + 1))
 	if err != nil {
 		return err
@@ -489,7 +489,7 @@ func walkReverse(c ethdb.CursorDupSort, from, to uint64, keyPrefixLen int, f fun
 			break
 		}
 
-		err = f(k, v[:keyPrefixLen], v[keyPrefixLen:])
+		err = f(binary.BigEndian.Uint64(k), k[8:], v)
 		if err != nil {
 			return err
 		}
@@ -498,7 +498,7 @@ func walkReverse(c ethdb.CursorDupSort, from, to uint64, keyPrefixLen int, f fun
 	return nil
 }
 
-func walk(c ethdb.CursorDupSort, from, to uint64, keyPrefixLen int, f func(kk, k, v []byte) error) error {
+func walk(c ethdb.Cursor, from, to uint64, f func(blockN uint64, k, v []byte) error) error {
 	for k, v, err := c.Seek(dbutils.EncodeBlockNumber(from)); k != nil; k, v, err = c.Next() {
 		if err != nil {
 			return err
@@ -508,7 +508,7 @@ func walk(c ethdb.CursorDupSort, from, to uint64, keyPrefixLen int, f func(kk, k
 			break
 		}
 
-		err = f(k, v[:keyPrefixLen], v[keyPrefixLen:])
+		err = f(binary.BigEndian.Uint64(k), k[8:], v)
 		if err != nil {
 			return err
 		}
@@ -517,7 +517,7 @@ func walk(c ethdb.CursorDupSort, from, to uint64, keyPrefixLen int, f func(kk, k
 	return nil
 }
 
-func findInStorageChangeSet2(c ethdb.CursorDupSort, blockNumber uint64, keyPrefixLen int, k []byte) ([]byte, error) {
+func findInStorageChangeSet2(c ethdb.Cursor, blockNumber uint64, keyPrefixLen int, k []byte) ([]byte, error) {
 	return doSearch2(
 		c, blockNumber,
 		keyPrefixLen,
@@ -527,7 +527,7 @@ func findInStorageChangeSet2(c ethdb.CursorDupSort, blockNumber uint64, keyPrefi
 	)
 }
 
-func findWithoutIncarnationInStorageChangeSet2(c ethdb.CursorDupSort, blockNumber uint64, keyPrefixLen int, addrBytesToFind []byte, keyBytesToFind []byte) ([]byte, error) {
+func findWithoutIncarnationInStorageChangeSet2(c ethdb.Cursor, blockNumber uint64, keyPrefixLen int, addrBytesToFind []byte, keyBytesToFind []byte) ([]byte, error) {
 	return doSearch2(
 		c, blockNumber,
 		keyPrefixLen,
@@ -538,42 +538,47 @@ func findWithoutIncarnationInStorageChangeSet2(c ethdb.CursorDupSort, blockNumbe
 }
 
 func doSearch2(
-	c ethdb.CursorDupSort,
+	c ethdb.Cursor,
 	blockNumber uint64,
 	keyPrefixLen int,
 	addrBytesToFind []byte,
 	keyBytesToFind []byte,
 	incarnation uint64,
 ) ([]byte, error) {
-	blockBytes := dbutils.EncodeBlockNumber(blockNumber)
+	startKey := make([]byte, 8+20)
+	binary.BigEndian.PutUint64(startKey, blockNumber)
+	copy(startKey[8:], addrBytesToFind)
 	if incarnation == 0 {
-		for k, v, err := c.SeekBothRange(blockBytes, addrBytesToFind); k != nil; k, v, err = c.Next() {
+		for k, v, err := c.Seek(startKey); k != nil; k, v, err = c.Next() {
 			if err != nil {
 				return nil, err
 			}
-			if !bytes.HasPrefix(v, addrBytesToFind) {
+			if !bytes.HasPrefix(k, startKey) {
 				return nil, nil
 			}
 
-			stHash := v[keyPrefixLen+common.IncarnationLength : keyPrefixLen+common.IncarnationLength+common.HashLength]
+			stHash := k[keyPrefixLen+common.IncarnationLength:]
 			if bytes.Equal(stHash, keyBytesToFind) {
-				return v[keyPrefixLen+common.IncarnationLength+common.HashLength:], nil
+				return v, nil
 			}
 		}
 	}
 
-	find := make([]byte, keyPrefixLen+common.IncarnationLength+len(keyBytesToFind))
-	copy(find, addrBytesToFind)
-	binary.BigEndian.PutUint64(find[keyPrefixLen:], incarnation)
-	copy(find[keyPrefixLen+common.IncarnationLength:], keyBytesToFind)
+	find := make([]byte, 8+keyPrefixLen+common.IncarnationLength+len(keyBytesToFind))
+	binary.BigEndian.PutUint64(startKey, blockNumber)
+	copy(find[8:], addrBytesToFind)
+	binary.BigEndian.PutUint64(find[8+keyPrefixLen:], incarnation)
+	copy(find[8+keyPrefixLen+common.IncarnationLength:], keyBytesToFind)
 
-	_, v, err := c.SeekBothRange(blockBytes, find)
+	found, v, err := c.SeekExact(find)
 	if err != nil {
 		return nil, err
 	}
-	if !bytes.HasPrefix(v, find) {
+	fmt.Printf("%x, %x\n", found, find)
+
+	if found == nil || !bytes.HasPrefix(found[8:], find) {
 		return nil, nil
 	}
 
-	return v[keyPrefixLen+common.IncarnationLength:], nil
+	return v, nil
 }

@@ -58,14 +58,14 @@ func (b StorageChangeSetBytes) FindWithoutIncarnation(addrHashToFind []byte, key
 	return findWithoutIncarnationInStorageChangeSet(b, common.HashLength, addrHashToFind, keyHashToFind)
 }
 
-type StorageChangeSet struct{ c ethdb.CursorDupSort }
+type StorageChangeSet struct{ c ethdb.Cursor }
 
-func (b StorageChangeSet) WalkReverse(from, to uint64, f func(kk, k, v []byte) error) error {
-	return walkReverse(b.c, from, to, common.HashLength+common.IncarnationLength+common.HashLength, f)
+func (b StorageChangeSet) WalkReverse(from, to uint64, f func(blockN uint64, k, v []byte) error) error {
+	return walkReverse(b.c, from, to, f)
 }
 
-func (b StorageChangeSet) Walk(from, to uint64, f func(kk, k, v []byte) error) error {
-	return walk(b.c, from, to, common.HashLength+common.IncarnationLength+common.HashLength, f)
+func (b StorageChangeSet) Walk(from, to uint64, f func(blockN uint64, k, v []byte) error) error {
+	return walk(b.c, from, to, f)
 }
 
 func (b StorageChangeSet) Find(blockNumber uint64, k []byte) ([]byte, error) {
@@ -101,14 +101,14 @@ func DecodeStoragePlain(b []byte) (*ChangeSet, error) {
 	return cs, nil
 }
 
-type StorageChangeSetPlain struct{ c ethdb.CursorDupSort }
+type StorageChangeSetPlain struct{ c ethdb.Cursor }
 
-func (b StorageChangeSetPlain) WalkReverse(from, to uint64, f func(kk, k, v []byte) error) error {
-	return walkReverse(b.c, from, to, common.AddressLength+common.IncarnationLength+common.HashLength, f)
+func (b StorageChangeSetPlain) WalkReverse(from, to uint64, f func(blockN uint64, k, v []byte) error) error {
+	return walkReverse(b.c, from, to, f)
 }
 
-func (b StorageChangeSetPlain) Walk(from, to uint64, f func(kk, k, v []byte) error) error {
-	return walk(b.c, from, to, common.AddressLength+common.IncarnationLength+common.HashLength, f)
+func (b StorageChangeSetPlain) Walk(from, to uint64, f func(blockN uint64, k, v []byte) error) error {
+	return walk(b.c, from, to, f)
 }
 
 func (b StorageChangeSetPlain) Find(blockNumber uint64, k []byte) ([]byte, error) {
@@ -225,7 +225,7 @@ func walkAndCollect(collectorFunc func([]byte, []byte) error, db ethdb.Getter, b
 			return false, nil
 		}
 		v = common.CopyBytes(v) // Making copy because otherwise it will be invalid after the transaction
-		if innerErr := collectorFunc(v[:keySize], v[keySize:]); innerErr != nil {
+		if innerErr := collectorFunc(k[8:], v); innerErr != nil {
 			return false, innerErr
 		}
 		return true, nil

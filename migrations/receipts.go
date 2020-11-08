@@ -2,7 +2,6 @@ package migrations
 
 import (
 	"bytes"
-	"context"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -265,20 +264,13 @@ var receiptsOnePerTx = Migration{
 }
 
 var accChangeSetDupSort = Migration{
-	Name: "acc_change_set_dup_sort_8",
+	Name: "acc_change_set_dup_sort_9",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
 		logEvery := time.NewTicker(30 * time.Second)
 		defer logEvery.Stop()
 		logPrefix := "change_set_dup_sort"
 
-		//buf := bytes.NewBuffer(make([]byte, 0, 100_000))
-		//reader := bytes.NewReader(nil)
-
 		const loadStep = "load"
-
-		if err = db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.PlainAccountChangeSetBucket2); err != nil {
-			return fmt.Errorf("clearing the receipt bucket: %w", err)
-		}
 
 		// Commit clearing of the bucket - freelist should now be written to the database
 		if err = CommitProgress(db, nil, false); err != nil {
@@ -287,15 +279,11 @@ var accChangeSetDupSort = Migration{
 
 		changeSetBucket := dbutils.PlainAccountChangeSetBucket
 		walkerAdapter := changeset.Mapper[dbutils.PlainAccountChangeSetBucket2].WalkerAdapter
-		i := 0
 		cmp := db.(ethdb.HasTx).Tx().Comparator(dbutils.PlainStorageChangeSetBucket2)
-		c := db.(ethdb.HasTx).Tx().Cursor(dbutils.PlainStorageChangeSetBucket2)
-		_, _, _ = c.First()
-		buf := etl.NewOldestEntryBuffer(etl.BufferOptimalSize * 4)
+		buf := etl.NewSortableBuffer(etl.BufferOptimalSize * 4)
 		buf.SetComparator(cmp)
-		newK := make([]byte, 8+20)
 
-		collectorR, err1 := etl.NewCollectorFromFiles(tmpdir + "1")
+		collectorR, err1 := etl.NewCollectorFromFiles(tmpdir)
 		if err1 != nil {
 			return err1
 		}
@@ -324,7 +312,7 @@ var accChangeSetDupSort = Migration{
 			goto LoadStep
 		}
 
-		collectorR = etl.NewCriticalCollector(tmpdir+"1", buf)
+		collectorR = etl.NewCriticalCollector(tmpdir, buf)
 		defer func() {
 			// don't clean if error or panic happened
 			if err != nil {
@@ -337,7 +325,6 @@ var accChangeSetDupSort = Migration{
 		}()
 
 		if err = db.Walk(changeSetBucket, nil, 0, func(kk, changesetBytes []byte) (bool, error) {
-			i += len(kk) + len(changesetBytes)
 			blockNum, _ := dbutils.DecodeTimestamp(kk)
 
 			select {
@@ -346,21 +333,10 @@ var accChangeSetDupSort = Migration{
 				log.Info(fmt.Sprintf("[%s] Progress2", logPrefix), "blockNum", blockNum)
 			}
 
+			newK := make([]byte, 8+20)
 			binary.BigEndian.PutUint64(newK, blockNum)
 			if err = walkerAdapter(changesetBytes).Walk(func(k, v []byte) error {
 				copy(newK[8:], k)
-				//a := accounts.Account{}
-				//err = a.DecodeForStorage(v)
-				//if err != nil {
-				//	panic(err)
-				//}
-				//
-				//binary.BigEndian.PutUint64(newK[8+20:], a.Incarnation)
-				//return c.Put(common.CopyBytes(newK), common.CopyBytes(v))
-
-				//newV = newV[:20+len(v)]
-				//copy(newV, k)
-				//copy(newV[20:], v)
 				return collectorR.Collect(newK, v)
 			}); err != nil {
 				return false, err
@@ -370,8 +346,6 @@ var accChangeSetDupSort = Migration{
 		}); err != nil {
 			return err
 		}
-
-		fmt.Printf("sz: %s\n", common.StorageSize(i))
 
 		if err = db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.PlainAccountChangeSetBucket2); err != nil {
 			return fmt.Errorf("clearing the receipt bucket: %w", err)
@@ -390,13 +364,6 @@ var accChangeSetDupSort = Migration{
 		// Now transaction would have been re-opened, and we should be re-using the space
 		if err = collectorR.Load(logPrefix, db, dbutils.PlainAccountChangeSetBucket2, etl.IdentityLoadFunc, etl.TransformArgs{
 			OnLoadCommit: CommitProgress,
-			LogDetailsLoad: func(k, v []byte) (additionalLogArguments []interface{}) {
-				err = db.(ethdb.DbWithPendingMutations).CommitAndBegin(context.Background())
-				if err != nil {
-					panic(err)
-				}
-				return []interface{}{"key", fmt.Sprintf("%x", k)} // loading is the second stage, from 50..100
-			},
 		}); err != nil {
 			return fmt.Errorf("loading the transformed data back into the receipts table: %w", err)
 		}
@@ -405,26 +372,20 @@ var accChangeSetDupSort = Migration{
 }
 
 var storageChangeSetDupSort = Migration{
-	Name: "storage_change_set_dup_sort_11",
+	Name: "storage_change_set_dup_sort_12",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
 		logEvery := time.NewTicker(30 * time.Second)
 		defer logEvery.Stop()
 		logPrefix := "storage_change_set_dup_sort"
 
-		//buf := bytes.NewBuffer(make([]byte, 0, 100_000))
-		//reader := bytes.NewReader(nil)
-
 		const loadStep = "load"
 		changeSetBucket := dbutils.PlainStorageChangeSetBucket
 		walkerAdapter := changeset.Mapper[dbutils.PlainStorageChangeSetBucket2].WalkerAdapter
-		i := 0
 		cmp := db.(ethdb.HasTx).Tx().Comparator(dbutils.PlainStorageChangeSetBucket2)
-		buf := etl.NewSortableBuffer(etl.BufferOptimalSize * 4 * 2)
+		buf := etl.NewSortableBuffer(etl.BufferOptimalSize * 4)
 		buf.SetComparator(cmp)
-		newK := make([]byte, 8+20)
-		newV := make([]byte, 8+32+4096)
 
-		collectorR, err1 := etl.NewCollectorFromFiles(tmpdir + "1")
+		collectorR, err1 := etl.NewCollectorFromFiles(tmpdir)
 		if err1 != nil {
 			return err1
 		}
@@ -453,7 +414,7 @@ var storageChangeSetDupSort = Migration{
 			goto LoadStep
 		}
 
-		collectorR = etl.NewCriticalCollector(tmpdir+"1", buf)
+		collectorR = etl.NewCriticalCollector(tmpdir, buf)
 		defer func() {
 			// don't clean if error or panic happened
 			if err != nil {
@@ -469,7 +430,6 @@ var storageChangeSetDupSort = Migration{
 		walkerAdapter = changeset.Mapper[dbutils.PlainStorageChangeSetBucket2].WalkerAdapter
 
 		if err = db.Walk(changeSetBucket, nil, 0, func(kk, changesetBytes []byte) (bool, error) {
-			i += len(kk) + len(changesetBytes)
 			blockNum, _ := dbutils.DecodeTimestamp(kk)
 
 			select {
@@ -478,18 +438,11 @@ var storageChangeSetDupSort = Migration{
 				log.Info(fmt.Sprintf("[%s] Progress", logPrefix), "blockNum", blockNum)
 			}
 
+			newK := make([]byte, 8+20+8+32)
 			binary.BigEndian.PutUint64(newK, blockNum)
 			if err = walkerAdapter(changesetBytes).Walk(func(k, v []byte) error {
-				copy(newK[8:], k[:20])
-				//newV = newV[:32+len(v)]
-				//copy(newV[:32], k[20+8:])
-				//copy(newV[32:], v)
-				//return c.Put(common.CopyBytes(newK), common.CopyBytes(newV))
-
-				newV = newV[:8+32+len(v)]
-				copy(newV, k[20:20+8+32])
-				copy(newV[8+32:], v)
-				return collectorR.Collect(newK, newV)
+				copy(newK[8:], k)
+				return collectorR.Collect(newK, v)
 			}); err != nil {
 				return false, err
 			}
@@ -499,11 +452,9 @@ var storageChangeSetDupSort = Migration{
 			return err
 		}
 
-		fmt.Printf("sz: %s\n", common.StorageSize(i))
-
-		//if err = db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.PlainStorageChangeSetBucket2); err != nil {
-		//	return fmt.Errorf("clearing the receipt bucket: %w", err)
-		//}
+		if err = db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.PlainStorageChangeSetBucket2); err != nil {
+			return fmt.Errorf("clearing the receipt bucket: %w", err)
+		}
 
 		// Commit clearing of the bucket - freelist should now be written to the database
 		if err = CommitProgress(db, []byte(loadStep), false); err != nil {
@@ -519,168 +470,6 @@ var storageChangeSetDupSort = Migration{
 		if err = collectorR.Load(logPrefix, db, dbutils.PlainAccountChangeSetBucket2, etl.IdentityLoadFunc, etl.TransformArgs{
 			OnLoadCommit: CommitProgress,
 			Comparator:   cmp,
-			LogDetailsLoad: func(k, v []byte) (additionalLogArguments []interface{}) {
-				err = db.(ethdb.DbWithPendingMutations).CommitAndBegin(context.Background())
-				if err != nil {
-					panic(err)
-				}
-				return []interface{}{"key", fmt.Sprintf("%x", k)} // loading is the second stage, from 50..100
-			},
-		}); err != nil {
-			return fmt.Errorf("loading the transformed data back into the receipts table: %w", err)
-		}
-		return nil
-	},
-}
-
-var accChangeSetDupSort2 = Migration{
-	Name: "acc_change_set_dup_fixed_17",
-	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
-		logEvery := time.NewTicker(30 * time.Second)
-		defer logEvery.Stop()
-		logPrefix := "change_set_dup_sort"
-
-		//buf := bytes.NewBuffer(make([]byte, 0, 100_000))
-		//reader := bytes.NewReader(nil)
-
-		const loadStep = "load"
-
-		if err = db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.PlainAccountChangeSetBucket3, dbutils.PlainAccountChangeSetBucket2, dbutils.PlainStorageChangeSetBucket2); err != nil {
-			return fmt.Errorf("clearing the receipt bucket: %w", err)
-		}
-
-		// Commit clearing of the bucket - freelist should now be written to the database
-		if err = CommitProgress(db, []byte(loadStep), false); err != nil {
-			return fmt.Errorf("committing the removal of receipt table: %w", err)
-		}
-
-		changeSetBucket := dbutils.PlainAccountChangeSetBucket
-		walkerAdapter := changeset.Mapper[dbutils.PlainAccountChangeSetBucket2].WalkerAdapter
-		i := 0
-		cmp := db.(ethdb.HasTx).Tx().Comparator(dbutils.PlainAccountChangeSetBucket3)
-		c := db.(ethdb.HasTx).Tx().Cursor(dbutils.PlainAccountChangeSetBucket3)
-		buf := etl.NewSortableBuffer(etl.BufferOptimalSize * 4 * 2)
-		buf.SetComparator(cmp)
-		newK := make([]byte, 8+20)
-
-		a := common.FromHex("00000000000000000000000000000000000000000000000000000000000000000000000000000000")
-
-		collectorR, err1 := etl.NewCollectorFromFiles(tmpdir + "1")
-		if err1 != nil {
-			return err1
-		}
-		switch string(progress) {
-		case "":
-			// can't use files if progress field not set, clear them
-			if collectorR != nil {
-				collectorR.Close(logPrefix)
-				collectorR = nil
-			}
-
-		case loadStep:
-			if collectorR == nil {
-				return ErrMigrationETLFilesDeleted
-			}
-			defer func() {
-				// don't clean if error or panic happened
-				if err != nil {
-					return
-				}
-				if rec := recover(); rec != nil {
-					panic(rec)
-				}
-				collectorR.Close(logPrefix)
-			}()
-			goto LoadStep
-		}
-
-		collectorR = etl.NewCriticalCollector(tmpdir+"1", buf)
-		defer func() {
-			// don't clean if error or panic happened
-			if err != nil {
-				return
-			}
-			if rec := recover(); rec != nil {
-				panic(rec)
-			}
-			collectorR.Close(logPrefix)
-		}()
-
-		if err = db.Walk(changeSetBucket, nil, 0, func(kk, changesetBytes []byte) (bool, error) {
-			i += len(kk) + len(changesetBytes) + 8 + 8
-			blockNum, _ := dbutils.DecodeTimestamp(kk)
-
-			select {
-			default:
-			case <-logEvery.C:
-				log.Info(fmt.Sprintf("[%s] Progress", logPrefix), "blockNum", blockNum)
-			}
-
-			binary.BigEndian.PutUint64(newK, blockNum)
-			if err = walkerAdapter(changesetBytes).Walk(func(k, v []byte) error {
-				copy(newK[8:], k[:20])
-				return c.Put(common.CopyBytes(newK), common.CopyBytes(a))
-				//return collectorR.Collect(kk, k)
-			}); err != nil {
-				return false, err
-			}
-
-			return true, nil
-		}); err != nil {
-			return err
-		}
-
-		changeSetBucket = dbutils.PlainStorageChangeSetBucket
-		walkerAdapter = changeset.Mapper[dbutils.PlainStorageChangeSetBucket2].WalkerAdapter
-
-		if err = db.Walk(changeSetBucket, nil, 0, func(kk, changesetBytes []byte) (bool, error) {
-			blockNum, _ := dbutils.DecodeTimestamp(kk)
-
-			select {
-			default:
-			case <-logEvery.C:
-				log.Info(fmt.Sprintf("[%s] Progress", logPrefix), "blockNum", blockNum)
-			}
-
-			binary.BigEndian.PutUint64(newK, blockNum)
-			if err = walkerAdapter(changesetBytes).Walk(func(k, v []byte) error {
-				copy(newK[8:], k[:20])
-				return c.Put(common.CopyBytes(newK), common.CopyBytes(k[20:]))
-				//return collectorR.Collect(kk, k)
-			}); err != nil {
-				return false, err
-			}
-
-			return true, nil
-		}); err != nil {
-			return err
-		}
-		fmt.Printf("sz: %s\n", common.StorageSize(i))
-
-		//if err = db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.PlainAccountChangeSetBucket3); err != nil {
-		//	return fmt.Errorf("clearing the receipt bucket: %w", err)
-		//}
-
-		// Commit clearing of the bucket - freelist should now be written to the database
-		if err = CommitProgress(db, []byte(loadStep), false); err != nil {
-			return fmt.Errorf("committing the removal of receipt table: %w", err)
-		}
-
-	LoadStep:
-		// Commit again
-		if err = CommitProgress(db, []byte(loadStep), false); err != nil {
-			return fmt.Errorf("committing the removal of receipt table: %w", err)
-		}
-		// Now transaction would have been re-opened, and we should be re-using the space
-		if err = collectorR.Load(logPrefix, db, dbutils.PlainAccountChangeSetBucket3, etl.IdentityLoadFunc, etl.TransformArgs{
-			OnLoadCommit: CommitProgress,
-			LogDetailsLoad: func(k, v []byte) (additionalLogArguments []interface{}) {
-				err = db.(ethdb.DbWithPendingMutations).CommitAndBegin(context.Background())
-				if err != nil {
-					panic(err)
-				}
-				return []interface{}{"key", fmt.Sprintf("%x", k)} // loading is the second stage, from 50..100
-			},
 		}); err != nil {
 			return fmt.Errorf("loading the transformed data back into the receipts table: %w", err)
 		}

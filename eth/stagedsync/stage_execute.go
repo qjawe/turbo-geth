@@ -258,29 +258,22 @@ func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database,
 	}
 
 	keyStart := dbutils.EncodeBlockNumber(u.UnwindPoint + 1)
-	c := tx.(ethdb.HasTx).Tx().CursorDupSort(dbutils.PlainAccountChangeSetBucket2)
-	for k, _, err := c.SeekExact(keyStart); k != nil; k, _, err = c.NextNoDup() {
-		if err != nil {
-			return err
+	if err := tx.Walk(dbutils.PlainAccountChangeSetBucket2, keyStart, 8*8, func(k, v []byte) (bool, error) {
+		if err := tx.Delete(dbutils.PlainAccountChangeSetBucket2, k, nil); err != nil {
+			return false, err
 		}
-		err = c.DeleteCurrentDuplicates()
-		if err != nil {
-			return err
-		}
+		return true, nil
+	}); err != nil {
+		return err
 	}
-	c.Close()
-
-	c = tx.(ethdb.HasTx).Tx().CursorDupSort(dbutils.PlainStorageChangeSetBucket2)
-	for k, _, err := c.SeekExact(keyStart); k != nil; k, _, err = c.NextNoDup() {
-		if err != nil {
-			return err
+	if err := tx.Walk(dbutils.PlainStorageChangeSetBucket2, keyStart, 8*8, func(k, v []byte) (bool, error) {
+		if err := tx.Delete(dbutils.PlainStorageChangeSetBucket2, k, nil); err != nil {
+			return false, err
 		}
-		err = c.DeleteCurrentDuplicates()
-		if err != nil {
-			return err
-		}
+		return true, nil
+	}); err != nil {
+		return err
 	}
-	c.Close()
 
 	if writeReceipts {
 		if err := rawdb.DeleteNewerReceipts(tx, u.UnwindPoint+1); err != nil {
