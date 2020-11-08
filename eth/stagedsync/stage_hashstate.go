@@ -186,9 +186,8 @@ type Promoter struct {
 }
 
 func getExtractFunc(db ethdb.Getter, changeSetBucket string) etl.ExtractFunc {
-	keySize := changeset.Mapper[changeSetBucket].KeySize
-	return func(_, changesetBytes []byte, next etl.ExtractNextFunc) error {
-		k := changesetBytes[:keySize]
+	return func(k, v []byte, next etl.ExtractNextFunc) error {
+		k = k[8:]
 		// ignoring value un purpose, we want the latest one and it is in PlainStateBucket
 		value, err := db.Get(dbutils.PlainStateBucket, k)
 		if err != nil && !errors.Is(err, ethdb.ErrKeyNotFound) {
@@ -203,9 +202,8 @@ func getExtractFunc(db ethdb.Getter, changeSetBucket string) etl.ExtractFunc {
 }
 
 func getExtractCode(db ethdb.Getter, changeSetBucket string) etl.ExtractFunc {
-	keySize := changeset.Mapper[changeSetBucket].KeySize
-	return func(_, changesetBytes []byte, next etl.ExtractNextFunc) error {
-		k := changesetBytes[:keySize]
+	return func(k, v []byte, next etl.ExtractNextFunc) error {
+		k = k[:8]
 		value, err := db.Get(dbutils.PlainStateBucket, k)
 		if err != nil && !errors.Is(err, ethdb.ErrKeyNotFound) {
 			return err
@@ -250,9 +248,8 @@ func getUnwindExtractStorage(changeSetBucket string) etl.ExtractFunc {
 }
 
 func getUnwindExtractAccounts(db ethdb.Getter, changeSetBucket string) etl.ExtractFunc {
-	mapper := changeset.Mapper[changeSetBucket]
-	return func(_, changesetBytes []byte, next etl.ExtractNextFunc) error {
-		k, v := changesetBytes[:mapper.KeySize], changesetBytes[mapper.KeySize:]
+	return func(k, v []byte, next etl.ExtractNextFunc) error {
+		k = k[8:]
 
 		newK, err := transformPlainStateKey(k)
 		if err != nil {
@@ -285,8 +282,8 @@ func getUnwindExtractAccounts(db ethdb.Getter, changeSetBucket string) etl.Extra
 }
 
 func getCodeUnwindExtractFunc(db ethdb.Getter) etl.ExtractFunc {
-	return func(_, changesetBytes []byte, next etl.ExtractNextFunc) error {
-		k, v := changesetBytes[:common.AddressLength], changesetBytes[common.AddressLength:]
+	return func(k, v []byte, next etl.ExtractNextFunc) error {
+		k = k[8:]
 		if len(v) == 0 {
 			return nil
 		}

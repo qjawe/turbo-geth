@@ -175,7 +175,7 @@ func TestMutationCommitThinHistory(t *testing.T) {
 	}
 
 	expectedChangeSetInDB := changeset.NewAccountChangeSetPlain()
-	err := db.Walk(dbutils.PlainAccountChangeSetBucket2, dbutils.EncodeBlockNumber(2), 8*8, func(k, v []byte) (bool, error) {
+	err := db.Walk(dbutils.PlainAccountChangeSetBucket2, dbutils.EncodeBlockNumber(2), 0, func(k, v []byte) (bool, error) {
 		if err := expectedChangeSetInDB.Add(k[8:], v); err != nil {
 			return false, err
 		}
@@ -213,7 +213,7 @@ func TestMutationCommitThinHistory(t *testing.T) {
 	}
 
 	cs := changeset.NewStorageChangeSetPlain()
-	err = db.Walk(dbutils.PlainStorageChangeSetBucket2, dbutils.EncodeBlockNumber(2), 8*8, func(k, v []byte) (bool, error) {
+	err = db.Walk(dbutils.PlainStorageChangeSetBucket2, dbutils.EncodeBlockNumber(2), 0, func(k, v []byte) (bool, error) {
 		if err2 := cs.Add(k[8:], v); err2 != nil {
 			return false, err2
 		}

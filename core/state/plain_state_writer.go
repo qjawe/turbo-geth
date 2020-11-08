@@ -158,6 +158,9 @@ func (w *PlainStateWriter) WriteChangeSets() error {
 	binary.BigEndian.PutUint64(key, w.blockNumber)
 	for _, cs := range accountChanges.Changes {
 		copy(key[8:], cs.Key)
+		if len(cs.Value) == 0 {
+			panic("??")
+		}
 		if err = db.Append(dbutils.PlainAccountChangeSetBucket2, common.CopyBytes(key), common.CopyBytes(cs.Value)); err != nil {
 			return err
 		}

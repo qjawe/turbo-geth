@@ -215,7 +215,6 @@ func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database,
 
 	rewindFunc := changeset.RewindDataPlain
 	stateBucket := dbutils.PlainStateBucket
-	storageKeyLength := common.AddressLength + common.IncarnationLength + common.HashLength
 	deleteAccountFunc := deleteAccountPlain
 	writeAccountFunc := writeAccountPlain
 	recoverCodeHashFunc := recoverCodeHashPlain
@@ -246,19 +245,21 @@ func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database,
 		}
 	}
 	for key, value := range storageMap {
+		fmt.Printf("del: %x, %x\n", key, value)
 		if len(value) > 0 {
-			if err := tx.Put(stateBucket, []byte(key)[:storageKeyLength], value); err != nil {
+
+			if err := tx.Put(stateBucket, []byte(key), value); err != nil {
 				return err
 			}
 		} else {
-			if err := tx.Delete(stateBucket, []byte(key)[:storageKeyLength], nil); err != nil {
+			if err := tx.Delete(stateBucket, []byte(key), nil); err != nil {
 				return err
 			}
 		}
 	}
 
 	keyStart := dbutils.EncodeBlockNumber(u.UnwindPoint + 1)
-	if err := tx.Walk(dbutils.PlainAccountChangeSetBucket2, keyStart, 8*8, func(k, v []byte) (bool, error) {
+	if err := tx.Walk(dbutils.PlainAccountChangeSetBucket2, keyStart, 0, func(k, v []byte) (bool, error) {
 		if err := tx.Delete(dbutils.PlainAccountChangeSetBucket2, k, nil); err != nil {
 			return false, err
 		}
@@ -266,7 +267,7 @@ func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database,
 	}); err != nil {
 		return err
 	}
-	if err := tx.Walk(dbutils.PlainStorageChangeSetBucket2, keyStart, 8*8, func(k, v []byte) (bool, error) {
+	if err := tx.Walk(dbutils.PlainStorageChangeSetBucket2, keyStart, 0, func(k, v []byte) (bool, error) {
 		if err := tx.Delete(dbutils.PlainStorageChangeSetBucket2, k, nil); err != nil {
 			return false, err
 		}

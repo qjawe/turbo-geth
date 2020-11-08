@@ -213,6 +213,7 @@ func (dsw *DbStateWriter) WriteChangeSets() error {
 	key := dbutils.EncodeBlockNumber(dsw.blockNr)
 	for _, cs := range accountChanges.Changes {
 		if err = dsw.db.Append(dbutils.AccountChangeSetBucket2, append(common.CopyBytes(key), cs.Key...), common.CopyBytes(cs.Value)); err != nil {
+			panic(err)
 			return err
 		}
 	}
@@ -226,7 +227,8 @@ func (dsw *DbStateWriter) WriteChangeSets() error {
 	}
 	sort.Sort(storageChanges)
 	for _, cs := range storageChanges.Changes {
-		if err = dsw.db.Append(dbutils.AccountChangeSetBucket2, append(common.CopyBytes(key), cs.Key...), common.CopyBytes(cs.Value)); err != nil {
+		if err = dsw.db.Append(dbutils.StorageChangeSetBucket2, append(common.CopyBytes(key), cs.Key...), common.CopyBytes(cs.Value)); err != nil {
+			panic(err)
 			return err
 		}
 	}

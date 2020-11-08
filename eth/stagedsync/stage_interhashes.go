@@ -9,7 +9,6 @@ import (
 	"time"
 
 	"github.com/ledgerwatch/turbo-geth/common"
-	"github.com/ledgerwatch/turbo-geth/common/changeset"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
 	"github.com/ledgerwatch/turbo-geth/core/rawdb"
@@ -147,10 +146,8 @@ func (p *HashPromoter) Promote(logPrefix string, s *StageState, from, to uint64,
 
 	startkey := dbutils.EncodeBlockNumber(from + 1)
 
-	mapper := changeset.Mapper[changeSetBucket]
-	extract := func(_, changesetBytes []byte, next etl.ExtractNextFunc) error {
-		k := changesetBytes[:mapper.KeySize]
-		newK, err := transformPlainStateKey(k)
+	extract := func(k, v []byte, next etl.ExtractNextFunc) error {
+		newK, err := transformPlainStateKey(k[8:])
 		if err != nil {
 			return err
 		}
@@ -191,10 +188,8 @@ func (p *HashPromoter) Unwind(logPrefix string, s *StageState, u *UnwindState, s
 
 	startkey := dbutils.EncodeBlockNumber(to + 1)
 
-	mapper := changeset.Mapper[changeSetBucket]
-	extract := func(_, changesetBytes []byte, next etl.ExtractNextFunc) error {
-		k := changesetBytes[:mapper.KeySize]
-		newK, err := transformPlainStateKey(k)
+	extract := func(k, v []byte, next etl.ExtractNextFunc) error {
+		newK, err := transformPlainStateKey(k[8:])
 		if err != nil {
 			return err
 		}

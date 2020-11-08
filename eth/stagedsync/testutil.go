@@ -36,6 +36,7 @@ func compareBucket(t *testing.T, db1, db2 ethdb.Database, bucketName string) {
 
 	bucket1 := make(map[string][]byte)
 	err = db1.Walk(bucketName, nil, 0, func(k, v []byte) (bool, error) {
+		fmt.Printf("1: %x %x\n", k, v)
 		bucket1[string(k)] = v
 		return true, nil
 	})
@@ -43,12 +44,13 @@ func compareBucket(t *testing.T, db1, db2 ethdb.Database, bucketName string) {
 
 	bucket2 := make(map[string][]byte)
 	err = db2.Walk(bucketName, nil, 0, func(k, v []byte) (bool, error) {
+		fmt.Printf("2: %x %x\n", k, v)
 		bucket2[string(k)] = v
 		return true, nil
 	})
 	assert.Nil(t, err)
 
-	assert.Equal(t, bucket1 /*expected*/, bucket2 /*actual*/)
+	assert.Equalf(t, bucket1 /*expected*/, bucket2 /*actual*/, "bucket: %s", bucketName)
 }
 
 type stateWriterGen func(uint64) state.WriterWithChangeSets
