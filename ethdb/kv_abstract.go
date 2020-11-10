@@ -62,11 +62,10 @@ type KV interface {
 type TxFlags uint
 
 const (
-	RW         TxFlags = 0x00 // default
-	RO         TxFlags = 0x02
-	Try        TxFlags = 0x04
-	NoMetaSync TxFlags = 0x08
-	NoSync     TxFlags = 0x10
+	RW    TxFlags = 0x00 // default
+	RO    TxFlags = 0x02
+	Try   TxFlags = 0x04
+	Async TxFlags = 0x08 // send to OS sync signal, but don't wait the end (it's safe to "kill -9", but OS crash/power-off may undo the last committed transaction)
 )
 
 type Tx interface {

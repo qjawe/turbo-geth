@@ -292,8 +292,8 @@ func (db *MdbxKV) Begin(_ context.Context, parent Tx, flags TxFlags) (Tx, error)
 	if flags&RO != 0 {
 		nativeFlags |= mdbx.Readonly
 	}
-	if flags&NoSync != 0 {
-		nativeFlags |= mdbx.TxNoSync
+	if flags&Async != 0 {
+		nativeFlags |= mdbx.TxNoSync | mdbx.TxNoMetaSync
 	}
 
 	var parentTx *mdbx.Txn
@@ -312,11 +312,13 @@ func (db *MdbxKV) Begin(_ context.Context, parent Tx, flags TxFlags) (Tx, error)
 		db:      db,
 		tx:      tx,
 		isSubTx: isSubTx,
+		flags:   flags,
 	}, nil
 }
 
 type mdbxTx struct {
 	isSubTx bool
+	flags   TxFlags
 	tx      *mdbx.Txn
 	db      *MdbxKV
 	cursors []*mdbx.Cursor
@@ -589,6 +591,12 @@ func (tx *mdbxTx) Commit(ctx context.Context) error {
 		return err
 	}
 	log.Info("Commit", "preparation", latency.Preparation, "gc", latency.GC, "audit", latency.Audit, "write", latency.Preparation, "fsync", latency.Sync, "ending", latency.Ending, "whole", latency.Whole)
+
+	if tx.flags&Async != 0 {
+		if err := tx.db.env.Sync(true, tx.flags&Async != 0); err != nil {
+			return err
+		}
+	}
 
 	return nil
 }
