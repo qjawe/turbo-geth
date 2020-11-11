@@ -385,7 +385,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 	var filter = func(k []byte) bool {
 		return !l.rd.Retain(k)
 	}
-	ih := IH(filter, tx.CursorDupSort(l.intermediateHashesBucket), tx.CursorDupSort(l.intermediateHashesBucket))
+	ih := IH(filter, tx.CursorDupSort(l.intermediateHashesBucket))
 	if err := l.iteration(c, ih, true /* first */); err != nil {
 		return EmptyRoot, err
 	}
@@ -733,13 +733,12 @@ const IHDupKeyLen = 2 * (common.HashLength + common.IncarnationLength)
 
 // IHCursor - holds logic related to iteration over IH bucket
 type IHCursor struct {
-	c          ethdb.CursorDupSort
-	cForDelete ethdb.CursorDupSort
-	filter     Filter
+	c      ethdb.CursorDupSort
+	filter Filter
 }
 
-func IH(f Filter, c ethdb.CursorDupSort, cForDelete ethdb.CursorDupSort) *IHCursor {
-	return &IHCursor{c: c, filter: f, cForDelete: cForDelete}
+func IH(f Filter, c ethdb.CursorDupSort) *IHCursor {
+	return &IHCursor{c: c, filter: f}
 }
 
 func (c *IHCursor) _seek(seek []byte) (k, v []byte, err error) {
