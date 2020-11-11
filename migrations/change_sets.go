@@ -16,7 +16,7 @@ import (
 )
 
 var accChangeSetDupSort = Migration{
-	Name: "acc_change_set_dup_sort_16",
+	Name: "acc_change_set_dup_sort_18",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
 		logEvery := time.NewTicker(30 * time.Second)
 		defer logEvery.Stop()
@@ -121,7 +121,7 @@ var accChangeSetDupSort = Migration{
 }
 
 var storageChangeSetDupSort = Migration{
-	Name: "storage_change_set_dup_sort_20",
+	Name: "storage_change_set_dup_sort_22",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
 		logEvery := time.NewTicker(30 * time.Second)
 		defer logEvery.Stop()

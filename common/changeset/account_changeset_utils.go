@@ -23,8 +23,8 @@ func findInAccountChangeSet(c ethdb.CursorDupSort, blockNumber uint64, key []byt
 
 func encodeAccounts2(blockN uint64, s *ChangeSet, f func(k, v []byte) error) error {
 	sort.Sort(s)
+	newK := dbutils.EncodeBlockNumber(blockN)
 	for _, cs := range s.Changes {
-		newK := dbutils.EncodeBlockNumber(blockN)
 		newV := make([]byte, len(cs.Key)+len(cs.Value))
 		copy(newV, cs.Key)
 		copy(newV[len(cs.Key):], cs.Value)

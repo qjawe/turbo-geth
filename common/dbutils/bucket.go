@@ -249,9 +249,6 @@ var DeprecatedBuckets = []string{
 	CurrentStateBucketOld1,
 	PlainStateBucketOld1,
 	IntermediateTrieHashBucketOld1,
-	"uncles",
-	"uncle",
-	"eth_tx",
 }
 
 type CustomComparator string
