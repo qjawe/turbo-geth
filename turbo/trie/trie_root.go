@@ -764,7 +764,6 @@ func (c *IHCursor) _seek(seek []byte) (k, v []byte, err error) {
 		return nil, nil, nil
 	}
 
-	kCopy, vCopy := common.CopyBytes(k), common.CopyBytes(v)
 	if len(v) > common.HashLength {
 		keyPart := len(v) - common.HashLength
 		k = append(k, v[:keyPart]...)
@@ -774,7 +773,7 @@ func (c *IHCursor) _seek(seek []byte) (k, v []byte, err error) {
 		return k, v, nil
 	}
 
-	err = c.cForDelete.Delete(kCopy, vCopy)
+	err = c.c.DeleteCurrent()
 	if err != nil {
 		return []byte{}, nil, err
 	}
@@ -792,7 +791,6 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 			return nil, nil, nil
 		}
 
-		kCopy, vCopy := common.CopyBytes(k), common.CopyBytes(v)
 		if len(v) > common.HashLength {
 			keyPart := len(v) - common.HashLength
 			k = append(k, v[:keyPart]...)
@@ -803,7 +801,7 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 			return k, v, nil
 		}
 
-		err = c.cForDelete.Delete(kCopy, vCopy)
+		err = c.c.DeleteCurrent()
 		if err != nil {
 			return []byte{}, nil, err
 		}
