@@ -163,6 +163,7 @@ func (h *Header) EmptyReceipts() bool {
 // a block's data contents (transactions and uncles) together.
 type Body struct {
 	Transactions []*Transaction
+	TxIds        []uint64
 	Uncles       []*Header
 }
 
