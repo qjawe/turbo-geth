@@ -304,6 +304,7 @@ func ReadTransactions(db ethdb.Database, baseTxId uint64, amount uint32) ([]*typ
 		return nil, err
 	}
 
+	txs = txs[:i] // user may request big "amount", but db can return small "amount". Return as much as we found.
 	return txs, nil
 }
 
