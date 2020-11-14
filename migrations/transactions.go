@@ -89,7 +89,8 @@ var transactionsTable = Migration{
 			}
 			// don't need canonical check
 
-			bodyRlp, err := rawdb.DecompressBlockBody(v)
+			var bodyRlp []byte
+			bodyRlp, err = rawdb.DecompressBlockBody(v)
 			if err != nil {
 				return false, err
 			}
