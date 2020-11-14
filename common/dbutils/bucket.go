@@ -112,8 +112,8 @@ var (
 	HeaderHashSuffix   = []byte("n") // headerPrefix + num (uint64 big endian) + headerHashSuffix -> hash
 	HeaderNumberPrefix = "H"         // headerNumberPrefix + hash -> num (uint64 big endian)
 
-	BlockBodyPrefix2    = "b"                // blockBodyPrefix + num (uint64 big endian) + hash -> block body
-	BlockBodyPrefix     = "b2"               // blockBodyPrefix + num (uint64 big endian) + hash -> block body
+	BlockBodyPrefix2    = "b2"               // blockBodyPrefix + num (uint64 big endian) + hash -> block body
+	BlockBodyPrefix     = "b"                // blockBodyPrefix + num (uint64 big endian) + hash -> block body
 	EthTx               = "eth_tx"           // tbl_sequence_u64 -> rlp(tx)
 	CanonicalBlocks     = "canonical_blocks" // block_num_u64 -> rlp(block_with_tx_ids)
 	BlockReceiptsPrefix = "r"                // blockReceiptsPrefix + num (uint64 big endian) + hash -> block receipts

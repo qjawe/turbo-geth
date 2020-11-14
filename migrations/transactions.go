@@ -80,7 +80,7 @@ var transactionsTable = Migration{
 			collectorT.Close(logPrefix)
 		}()
 
-		if err = db.Walk(dbutils.BlockBodyPrefix2, nil, 0, func(k, v []byte) (bool, error) {
+		if err = db.Walk(dbutils.BlockBodyPrefix, nil, 0, func(k, v []byte) (bool, error) {
 			select {
 			default:
 			case <-logEvery.C:
