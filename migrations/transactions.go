@@ -16,7 +16,7 @@ import (
 )
 
 var transactionsTable = Migration{
-	Name: "tx_table_1",
+	Name: "tx_table_2",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
 		logEvery := time.NewTicker(30 * time.Second)
 		defer logEvery.Stop()
