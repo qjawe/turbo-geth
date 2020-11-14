@@ -305,22 +305,6 @@ func TestTexn_Put_emptyValue(t *testing.T) {
 	}
 }
 
-//func Test2RwTx(t *testing.T) {
-//	env := setup(t)
-//	defer clean(env, t)
-//
-//	err := env.UpdateLocked(func(txn *Txn) (err error) {
-//		fmt.Printf("can see\n")
-//		_, err = env.BeginTxn(nil, TxRW)
-//		fmt.Printf("can't: %s\n", err)
-//		return nil
-//	})
-//	if err != nil {
-//		t.Error(err)
-//		return
-//	}
-//}
-
 func TestTxn_PutReserve(t *testing.T) {
 	env := setup(t)
 	defer clean(env, t)
