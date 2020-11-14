@@ -1,7 +1,6 @@
 package stagedsync
 
 import (
-	"context"
 	"math/big"
 	"testing"
 	"time"
@@ -19,7 +18,7 @@ import (
 )
 
 func TestSenders(t *testing.T) {
-	db, ctx, require := ethdb.NewMemDatabase(), context.Background(), require.New(t)
+	db, require := ethdb.NewMemDatabase(), require.New(t)
 	var testKey, _ = crypto.HexToECDSA("b71c71a67e1177ad4e901695e1b4b9ee17ae16c6668d313eac2f96dbcda3f291")
 	testAddr := crypto.PubkeyToAddress(testKey.PublicKey)
 
@@ -31,27 +30,27 @@ func TestSenders(t *testing.T) {
 
 	// prepare db so it works with our test
 	signer1 := types.MakeSigner(params.MainnetChainConfig, big.NewInt(int64(1)))
-	rawdb.WriteBodyFromNetwork(ctx, db, common.HexToHash("01"), 1, &types.Body{
+	require.NoError(rawdb.WriteBody(db, common.HexToHash("01"), 1, &types.Body{
 		Transactions: []*types.Transaction{
 			mustSign(types.NewTransaction(1, testAddr, u256.Num1, 1, u256.Num1, nil), signer1),
 			mustSign(types.NewTransaction(2, testAddr, u256.Num1, 2, u256.Num1, nil), signer1),
 		},
-	})
+	}))
 	require.NoError(rawdb.WriteCanonicalHash(db, common.HexToHash("01"), 1))
 
 	signer2 := types.MakeSigner(params.MainnetChainConfig, big.NewInt(int64(1)))
-	rawdb.WriteBodyFromNetwork(ctx, db, common.HexToHash("02"), 2, &types.Body{
+	require.NoError(rawdb.WriteBody(db, common.HexToHash("02"), 2, &types.Body{
 		Transactions: []*types.Transaction{
 			mustSign(types.NewTransaction(3, testAddr, u256.Num1, 3, u256.Num1, nil), signer2),
 			mustSign(types.NewTransaction(4, testAddr, u256.Num1, 4, u256.Num1, nil), signer2),
 			mustSign(types.NewTransaction(5, testAddr, u256.Num1, 5, u256.Num1, nil), signer2),
 		},
-	})
+	}))
 	require.NoError(rawdb.WriteCanonicalHash(db, common.HexToHash("02"), 2))
 
-	rawdb.WriteBodyFromNetwork(ctx, db, common.HexToHash("03"), 3, &types.Body{
+	require.NoError(rawdb.WriteBody(db, common.HexToHash("03"), 3, &types.Body{
 		Transactions: []*types.Transaction{}, Uncles: []*types.Header{{GasLimit: 3}},
-	})
+	}))
 	require.NoError(rawdb.WriteCanonicalHash(db, common.HexToHash("03"), 3))
 
 	require.NoError(stages.SaveStageProgress(db, stages.Bodies, 3, nil))

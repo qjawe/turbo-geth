@@ -308,11 +308,27 @@ func ReadTransactions(db ethdb.Database, baseTxId uint64, amount uint32) ([]*typ
 	return txs, nil
 }
 
-// WriteBodyRLP stores an RLP encoded block body into the database.
-func WriteBodyRLP(ctx context.Context, db DatabaseWriter, hash common.Hash, number uint64, rlp rlp.RawValue) {
-	if common.IsCanceled(ctx) {
-		return
+func WriteTransactions(db DatabaseWriter, txs []*types.Transaction, baseTxId uint64) error {
+	txId := baseTxId
+	buf := bytes.NewBuffer(nil)
+	for _, tx := range txs {
+		txIdKey := make([]byte, 8)
+		binary.BigEndian.PutUint64(txIdKey, txId)
+		txId++
+
+		buf.Reset()
+		if err := rlp.Encode(buf, tx); err != nil {
+			return fmt.Errorf("broken tx rlp: %w", err)
+		}
+		if err := db.Put(dbutils.EthTx, txIdKey, common.CopyBytes(buf.Bytes())); err != nil {
+			return err
+		}
 	}
+	return nil
+}
+
+// WriteBodyRLP stores an RLP encoded block body into the database.
+func WriteBodyRLP(db DatabaseWriter, hash common.Hash, number uint64, rlp rlp.RawValue) {
 	if debug.IsBlockCompressionEnabled() {
 		rlp = snappy.Encode(nil, rlp)
 	}
@@ -363,18 +379,28 @@ func ReadSenders(db databaseReader, hash common.Hash, number uint64) []common.Ad
 	return senders
 }
 
-// WriteBodyFromNetwork - writes body in Network format, later staged sync will convert it into Storage format
-func WriteBodyFromNetwork(ctx context.Context, db DatabaseWriter, hash common.Hash, number uint64, body *types.Body) {
-	if common.IsCanceled(ctx) {
-		return
-	}
+// WriteBody - writes body in Network format, later staged sync will convert it into Storage format
+func WriteBody(db ethdb.Database, hash common.Hash, number uint64, body *types.Body) error {
 	// Pre-processing
 	body.SendersFromTxs()
-	data, err := rlp.EncodeToBytes(body)
+	baseTxId, err := db.Sequence(dbutils.EthTx, uint64(len(body.Transactions)))
 	if err != nil {
-		log.Crit("Failed to RLP encode body", "err", err)
+		return err
 	}
-	WriteBodyRLP(ctx, db, hash, number, data)
+	data, err := rlp.EncodeToBytes(types.BodyForStorage{
+		BaseTxId: baseTxId,
+		TxAmount: uint32(len(body.Transactions)),
+		Uncles:   body.Uncles,
+	})
+	if err != nil {
+		return fmt.Errorf("failed to RLP encode body: %w", err)
+	}
+	WriteBodyRLP(db, hash, number, data)
+	err = WriteTransactions(db, body.Transactions, baseTxId)
+	if err != nil {
+		return fmt.Errorf("failed to WriteTransactions: %w", err)
+	}
+	return nil
 }
 
 func WriteSenders(ctx context.Context, db DatabaseWriter, hash common.Hash, number uint64, senders []common.Address) {
@@ -639,8 +665,10 @@ func ReadBlock(db ethdb.Database, hash common.Hash, number uint64) *types.Block 
 }
 
 // WriteBlock serializes a block into the database, header and body separately.
-func WriteBlock(ctx context.Context, db DatabaseWriter, block *types.Block) error {
-	WriteBodyFromNetwork(ctx, db, block.Hash(), block.NumberU64(), block.Body())
+func WriteBlock(ctx context.Context, db ethdb.Database, block *types.Block) error {
+	if err := WriteBody(db, block.Hash(), block.NumberU64(), block.Body()); err != nil {
+		return err
+	}
 	WriteHeader(ctx, db, block.Header())
 	return nil
 }
