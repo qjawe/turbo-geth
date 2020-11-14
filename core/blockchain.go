@@ -1027,7 +1027,7 @@ func (bc *BlockChain) InsertReceiptChain(blockChain types.Blocks, receiptChain [
 				}
 			}
 			// Write all the data out into the database
-			rawdb.WriteBody(context.Background(), batch, block.Hash(), block.NumberU64(), block.Body())
+			rawdb.WriteBodyFromNetwork(context.Background(), batch, block.Hash(), block.NumberU64(), block.Body())
 			if err := rawdb.WriteReceipts(batch, block.NumberU64(), receiptChain[i]); err != nil {
 				return 0, err
 			}
@@ -1146,7 +1146,7 @@ func (bc *BlockChain) writeBlockWithState(ctx context.Context, block *types.Bloc
 	if err := rawdb.WriteTd(bc.db, block.Hash(), block.NumberU64(), externTd); err != nil {
 		return NonStatTy, err
 	}
-	rawdb.WriteBody(ctx, bc.db, block.Hash(), block.NumberU64(), block.Body())
+	rawdb.WriteBodyFromNetwork(ctx, bc.db, block.Hash(), block.NumberU64(), block.Body())
 	sendersData := make([]byte, len(block.Transactions())*common.AddressLength)
 	senders := block.Body().SendersFromTxs()
 	for i, sender := range senders {
@@ -2285,7 +2285,7 @@ func InsertBodies(
 			return true, ctx.Err()
 		}
 
-		rawdb.WriteBody(ctx, batch, block.Hash(), block.NumberU64(), block.Body())
+		rawdb.WriteBodyFromNetwork(ctx, batch, block.Hash(), block.NumberU64(), block.Body())
 
 		ctx = config.WithEIPsFlags(ctx, block.Number())
 		ctx = params.WithNoHistory(ctx, noHistory, isNoHistory)
