@@ -268,22 +268,19 @@ func deleteHeaderWithoutNumber(db DatabaseDeleter, hash common.Hash, number uint
 }
 
 // ReadBodyRLP retrieves the block body (transactions and uncles) in RLP encoding.
-func ReadBodyRLP(db databaseReader, hash common.Hash, number uint64) rlp.RawValue {
-	data, err1 := db.Get(dbutils.BlockBodyPrefix, dbutils.BlockBodyKey(number, hash))
-	if err1 != nil && !errors.Is(err1, ethdb.ErrKeyNotFound) {
-		log.Error("ReadBodyRLP failed", "err", err1)
-	}
-	bodyRlp, err := DecompressBlockBody(data)
+func ReadBodyRLP(db ethdb.Database, hash common.Hash, number uint64) rlp.RawValue {
+	body := ReadBody(db, hash, number)
+	bodyRlp, err := rlp.EncodeToBytes(body)
 	if err != nil {
-		log.Warn("err on decode block", "err", err)
+		log.Error("ReadBodyRLP failed", "err", err)
 	}
 	return bodyRlp
 }
 
 func ReadStorageBodyRLP(db databaseReader, hash common.Hash, number uint64) rlp.RawValue {
-	bodyRlp, err1 := db.Get(dbutils.BlockBodyPrefix, dbutils.BlockBodyKey(number, hash))
-	if err1 != nil && !errors.Is(err1, ethdb.ErrKeyNotFound) {
-		log.Error("ReadBodyRLP failed", "err", err1)
+	bodyRlp, err := db.Get(dbutils.BlockBodyPrefix, dbutils.BlockBodyKey(number, hash))
+	if err != nil && !errors.Is(err, ethdb.ErrKeyNotFound) {
+		log.Error("ReadBodyRLP failed", "err", err)
 	}
 	return bodyRlp
 }
@@ -338,7 +335,7 @@ func ReadBody(db ethdb.Database, hash common.Hash, number uint64) *types.Body {
 		return nil
 	}
 	bodyForStorage := new(types.BodyForStorage)
-	err := rlp.Decode(bytes.NewReader(data), bodyForStorage)
+	err := rlp.DecodeBytes(data, bodyForStorage)
 	if err != nil {
 		log.Error("Invalid block body RLP", "hash", hash, "err", err)
 		return nil
@@ -365,8 +362,8 @@ func ReadSenders(db databaseReader, hash common.Hash, number uint64) []common.Ad
 	return senders
 }
 
-// WriteBody storea a block body into the database.
-func WriteBody(ctx context.Context, db DatabaseWriter, hash common.Hash, number uint64, body *types.Body) {
+// WriteBodyFromNetwork - writes body in Network format, later staged sync will convert it into Storage format
+func WriteBodyFromNetwork(ctx context.Context, db DatabaseWriter, hash common.Hash, number uint64, body *types.Body) {
 	if common.IsCanceled(ctx) {
 		return
 	}
@@ -642,7 +639,7 @@ func ReadBlock(db ethdb.Database, hash common.Hash, number uint64) *types.Block 
 
 // WriteBlock serializes a block into the database, header and body separately.
 func WriteBlock(ctx context.Context, db DatabaseWriter, block *types.Block) error {
-	WriteBody(ctx, db, block.Hash(), block.NumberU64(), block.Body())
+	WriteBodyFromNetwork(ctx, db, block.Hash(), block.NumberU64(), block.Body())
 	WriteHeader(ctx, db, block.Header())
 	return nil
 }

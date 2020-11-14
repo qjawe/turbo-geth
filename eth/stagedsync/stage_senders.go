@@ -12,7 +12,6 @@ import (
 	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
-	"github.com/ledgerwatch/turbo-geth/core/rawdb"
 	"github.com/ledgerwatch/turbo-geth/core/types"
 	"github.com/ledgerwatch/turbo-geth/crypto/secp256k1"
 	"github.com/ledgerwatch/turbo-geth/eth/stagedsync/stages"
@@ -133,6 +132,7 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 					return
 				}
 
+				fmt.Printf("2: %x %x\n", txKey, buf.Bytes())
 				if err := collectorTx.Collect(txKey, buf.Bytes()); err != nil {
 					errCh <- j.err
 					return
@@ -149,6 +149,7 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 				errCh <- j.err
 				return
 			}
+			fmt.Printf("1: %x %x\n", j.key, buf.Bytes())
 			if err := collectorBody.Collect(j.key, buf.Bytes()); err != nil {
 				errCh <- j.err
 				return
@@ -158,8 +159,7 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 	}()
 
 	reader := bytes.NewReader(nil)
-
-	if err := db.Walk(dbutils.BlockBodyPrefix2, dbutils.EncodeBlockNumber(s.BlockNumber+1), 0, func(k, v []byte) (bool, error) {
+	if err := db.Walk(dbutils.BlockBodyPrefix, dbutils.EncodeBlockNumber(s.BlockNumber+1), 0, func(k, v []byte) (bool, error) {
 		if err := common.Stopped(quitCh); err != nil {
 			return false, err
 		}
@@ -175,22 +175,15 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 			return true, nil
 		}
 
-		data := make([]byte, len(v))
-		copy(data, v)
-
-		bodyRlp, err := rawdb.DecompressBlockBody(data)
-		if err != nil {
-			return false, err
-		}
-		reader.Reset(bodyRlp)
 		body := new(types.Body)
-		if err = rlp.Decode(reader, body); err != nil {
+		reader.Reset(v)
+		if err := rlp.Decode(reader, body); err != nil {
 			return false, fmt.Errorf("[%s]: invalid block body RLP: %w", logPrefix, err)
 		}
 
 		txId, err := db.Sequence(dbutils.EthTx, uint64(len(body.Transactions)))
 		if err != nil {
-			return false, nil
+			return false, err
 		}
 
 		select {

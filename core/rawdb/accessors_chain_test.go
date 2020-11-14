@@ -83,7 +83,7 @@ func TestBodyStorage(t *testing.T) {
 		t.Fatalf("Non existent body returned: %v", entry)
 	}
 	// Write and verify the body in the database
-	WriteBody(context.Background(), db, hash, 0, body)
+	WriteBodyFromNetwork(context.Background(), db, hash, 0, body)
 	if entry := ReadBody(db, hash, 0); entry == nil {
 		t.Fatalf("Stored body not found")
 	} else if types.DeriveSha(types.Transactions(entry.Transactions)) != types.DeriveSha(types.Transactions(body.Transactions)) || types.CalcUncleHash(entry.Uncles) != types.CalcUncleHash(body.Uncles) {
@@ -182,7 +182,7 @@ func TestPartialBlockStorage(t *testing.T) {
 	DeleteHeader(db, block.Hash(), block.NumberU64())
 
 	// Store a body and check that it's not recognized as a block
-	WriteBody(ctx, db, block.Hash(), block.NumberU64(), block.Body())
+	WriteBodyFromNetwork(ctx, db, block.Hash(), block.NumberU64(), block.Body())
 	if entry := ReadBlock(db, block.Hash(), block.NumberU64()); entry != nil {
 		t.Fatalf("Non existent block returned: %v", entry)
 	}
@@ -190,7 +190,7 @@ func TestPartialBlockStorage(t *testing.T) {
 
 	// Store a header and a body separately and check reassembly
 	WriteHeader(ctx, db, block.Header())
-	WriteBody(ctx, db, block.Hash(), block.NumberU64(), block.Body())
+	WriteBodyFromNetwork(ctx, db, block.Hash(), block.NumberU64(), block.Body())
 
 	if entry := ReadBlock(db, block.Hash(), block.NumberU64()); entry == nil {
 		t.Fatalf("Stored block not found")
@@ -366,7 +366,7 @@ func TestBlockReceiptStorage(t *testing.T) {
 		t.Fatalf("non existent receipts returned: %v", rs)
 	}
 	// Insert the body that corresponds to the receipts
-	WriteBody(ctx, db, hash, 0, body)
+	WriteBodyFromNetwork(ctx, db, hash, 0, body)
 
 	// Insert the receipt slice into the database and check presence
 	if err := WriteReceipts(db, 0, receipts); err != nil {
@@ -389,7 +389,7 @@ func TestBlockReceiptStorage(t *testing.T) {
 		t.Fatalf(err.Error())
 	}
 	// Sanity check that body alone without the receipt is a full purge
-	WriteBody(ctx, db, hash, 0, body)
+	WriteBodyFromNetwork(ctx, db, hash, 0, body)
 
 	if err := DeleteReceipts(db, 0); err != nil {
 		t.Fatalf("DeleteReceipts failed: %v", err)
