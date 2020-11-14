@@ -9,11 +9,10 @@ import (
 	"sync"
 	"time"
 
-	"github.com/ledgerwatch/turbo-geth/core/rawdb"
-
 	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
+	"github.com/ledgerwatch/turbo-geth/core/rawdb"
 	"github.com/ledgerwatch/turbo-geth/core/types"
 	"github.com/ledgerwatch/turbo-geth/crypto/secp256k1"
 	"github.com/ledgerwatch/turbo-geth/eth/stagedsync/stages"
@@ -91,6 +90,11 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 	defer logEvery.Stop()
 
 	collector := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
+	collectorBody := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
+	collectorTx := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
+	buf := bytes.NewBuffer(make([]byte, 4096))
+	txKey := make([]byte, 8)
+
 	errCh := make(chan error)
 	go func() {
 		defer close(errCh)
@@ -114,8 +118,45 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 				errCh <- j.err
 				return
 			}
+
+			// store transactions in own table, key is the sequence of this table
+			txId := j.baseTxId
+			txIds := make([]uint64, len(j.body.Transactions))
+			for i := 0; i < len(j.body.Transactions); i++ {
+				binary.BigEndian.PutUint64(txKey, txId)
+				txIds[i] = txId
+				txId++
+
+				buf.Reset()
+				if err := rlp.Encode(buf, j.body.Transactions[i]); err != nil {
+					errCh <- j.err
+					return
+				}
+
+				if err := collectorTx.Collect(txKey, buf.Bytes()); err != nil {
+					errCh <- j.err
+					return
+				}
+			}
+
+			// re-write block without transactions
+			buf.Reset()
+			if err := rlp.Encode(buf, types.BodyForStorage{
+				TxIds:  txIds,
+				Uncles: j.body.Uncles,
+			}); err != nil {
+				errCh <- j.err
+				return
+			}
+			if err := collectorBody.Collect(j.key, buf.Bytes()); err != nil {
+				errCh <- j.err
+				return
+			}
+
 		}
 	}()
+
+	reader := bytes.NewReader(nil)
 
 	if err := db.Walk(dbutils.BlockBodyPrefix, dbutils.EncodeBlockNumber(s.BlockNumber+1), 0, func(k, v []byte) (bool, error) {
 		if err := common.Stopped(quitCh); err != nil {
@@ -140,13 +181,23 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 		if err != nil {
 			return false, err
 		}
+		reader.Reset(bodyRlp)
+		body := new(types.Body)
+		if err = rlp.Decode(reader, body); err != nil {
+			return false, fmt.Errorf("[%s]: invalid block body RLP: %w", logPrefix, err)
+		}
+
+		txId, err := db.Sequence(dbutils.EthTx, uint64(len(body.Transactions)))
+		if err != nil {
+			return false, nil
+		}
 
 		select {
 		case err := <-errCh:
 			if err != nil {
 				return false, err
 			}
-		case jobs <- &senderRecoveryJob{bodyRlp: bodyRlp, blockNumber: blockNumber, index: int(blockNumber - s.BlockNumber - 1)}:
+		case jobs <- &senderRecoveryJob{body: body, baseTxId: txId, key: k, blockNumber: blockNumber, index: int(blockNumber - s.BlockNumber - 1)}:
 		}
 
 		return true, nil
@@ -173,9 +224,6 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 		loadFunc,
 		etl.TransformArgs{
 			Quit: quitCh,
-			LogDetailsExtract: func(k, v []byte) (additionalLogArguments []interface{}) {
-				return []interface{}{"block", binary.BigEndian.Uint64(k)}
-			},
 			LogDetailsLoad: func(k, v []byte) (additionalLogArguments []interface{}) {
 				return []interface{}{"block", binary.BigEndian.Uint64(k)}
 			},
@@ -184,11 +232,29 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 		return err
 	}
 
+	if err := collectorTx.Load(logPrefix, db,
+		dbutils.EthTx,
+		etl.IdentityLoadFunc,
+		etl.TransformArgs{Quit: quitCh},
+	); err != nil {
+		return err
+	}
+
+	if err := collectorBody.Load(logPrefix, db,
+		dbutils.BlockBodyPrefix,
+		etl.IdentityLoadFunc,
+		etl.TransformArgs{Quit: quitCh},
+	); err != nil {
+		return err
+	}
+
 	return s.DoneAndUpdate(db, to)
 }
 
 type senderRecoveryJob struct {
-	bodyRlp     rlp.RawValue
+	body        *types.Body
+	baseTxId    uint64
+	key         []byte
 	blockNumber uint64
 	index       int
 	senders     []byte
@@ -200,12 +266,7 @@ func recoverSenders(logPrefix string, cryptoContext *secp256k1.Context, config *
 		if job == nil {
 			return
 		}
-		body := new(types.Body)
-		if err := rlp.Decode(bytes.NewReader(job.bodyRlp), body); err != nil {
-			job.err = fmt.Errorf("%s: invalid block body RLP: %w", logPrefix, err)
-			out <- job
-			return
-		}
+		body := job.body
 		signer := types.MakeSigner(config, big.NewInt(int64(job.blockNumber)))
 		job.senders = make([]byte, len(body.Transactions)*common.AddressLength)
 		for i, tx := range body.Transactions {
