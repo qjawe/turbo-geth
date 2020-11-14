@@ -175,7 +175,7 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 			return true, nil
 		}
 
-		body := new(types.Body)
+		body := new(types.Body) // read body in network format and convert them into storage format
 		reader.Reset(v)
 		if err := rlp.Decode(reader, body); err != nil {
 			return false, fmt.Errorf("[%s]: invalid block body RLP: %w", logPrefix, err)
