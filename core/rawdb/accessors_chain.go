@@ -286,6 +286,9 @@ func ReadStorageBodyRLP(db databaseReader, hash common.Hash, number uint64) rlp.
 }
 
 func ReadTransactions(db ethdb.Database, baseTxId uint64, amount uint32) ([]*types.Transaction, error) {
+	if amount == 0 {
+		return []*types.Transaction{}, nil
+	}
 	txIdKey := make([]byte, 8)
 	reader := bytes.NewReader(nil)
 	txs := make([]*types.Transaction, amount)
