@@ -76,14 +76,16 @@ func TestBodyStorage(t *testing.T) {
 	body := &types.Body{Uncles: []*types.Header{{Extra: []byte("test header")}}}
 
 	hasher := sha3.NewLegacyKeccak256()
-	rlp.Encode(hasher, body)
+	_ = rlp.Encode(hasher, body)
 	hash := common.BytesToHash(hasher.Sum(nil))
 
 	if entry := ReadBody(db, hash, 0); entry != nil {
 		t.Fatalf("Non existent body returned: %v", entry)
 	}
 	// Write and verify the body in the database
-	WriteBodyFromNetwork(context.Background(), db, hash, 0, body)
+	if err := WriteBody(db, hash, 0, body); err != nil {
+		t.Fatal(err)
+	}
 	if entry := ReadBody(db, hash, 0); entry == nil {
 		t.Fatalf("Stored body not found")
 	} else if types.DeriveSha(types.Transactions(entry.Transactions)) != types.DeriveSha(types.Transactions(body.Transactions)) || types.CalcUncleHash(entry.Uncles) != types.CalcUncleHash(body.Uncles) {
@@ -182,7 +184,9 @@ func TestPartialBlockStorage(t *testing.T) {
 	DeleteHeader(db, block.Hash(), block.NumberU64())
 
 	// Store a body and check that it's not recognized as a block
-	WriteBodyFromNetwork(ctx, db, block.Hash(), block.NumberU64(), block.Body())
+	if err := WriteBody(db, block.Hash(), block.NumberU64(), block.Body()); err != nil {
+		t.Fatal(err)
+	}
 	if entry := ReadBlock(db, block.Hash(), block.NumberU64()); entry != nil {
 		t.Fatalf("Non existent block returned: %v", entry)
 	}
@@ -190,7 +194,9 @@ func TestPartialBlockStorage(t *testing.T) {
 
 	// Store a header and a body separately and check reassembly
 	WriteHeader(ctx, db, block.Header())
-	WriteBodyFromNetwork(ctx, db, block.Hash(), block.NumberU64(), block.Body())
+	if err := WriteBody(db, block.Hash(), block.NumberU64(), block.Body()); err != nil {
+		t.Fatal(err)
+	}
 
 	if entry := ReadBlock(db, block.Hash(), block.NumberU64()); entry == nil {
 		t.Fatalf("Stored block not found")
@@ -324,8 +330,6 @@ func TestBlockReceiptStorage(t *testing.T) {
 	db := ethdb.NewMemDatabase()
 	defer db.Close()
 
-	ctx := context.Background()
-
 	// Create a live block since we need metadata to reconstruct the receipt
 	tx1 := types.NewTransaction(1, common.HexToAddress("0x1"), u256.Num1, 1, u256.Num1, nil)
 	tx2 := types.NewTransaction(2, common.HexToAddress("0x2"), u256.Num2, 2, u256.Num2, nil)
@@ -366,7 +370,9 @@ func TestBlockReceiptStorage(t *testing.T) {
 		t.Fatalf("non existent receipts returned: %v", rs)
 	}
 	// Insert the body that corresponds to the receipts
-	WriteBodyFromNetwork(ctx, db, hash, 0, body)
+	if err := WriteBody(db, hash, 0, body); err != nil {
+		t.Fatal(err)
+	}
 
 	// Insert the receipt slice into the database and check presence
 	if err := WriteReceipts(db, 0, receipts); err != nil {
@@ -386,10 +392,12 @@ func TestBlockReceiptStorage(t *testing.T) {
 	}
 	// Ensure that receipts without metadata can be returned without the block body too
 	if err := checkReceiptsRLP(ReadRawReceipts(db, hash, 0), receipts); err != nil {
-		t.Fatalf(err.Error())
+		t.Fatal(err)
 	}
 	// Sanity check that body alone without the receipt is a full purge
-	WriteBodyFromNetwork(ctx, db, hash, 0, body)
+	if err := WriteBody(db, hash, 0, body); err != nil {
+		t.Fatal(err)
+	}
 
 	if err := DeleteReceipts(db, 0); err != nil {
 		t.Fatalf("DeleteReceipts failed: %v", err)

@@ -1,7 +1,6 @@
 package stagedsync
 
 import (
-	"bytes"
 	"encoding/binary"
 	"errors"
 	"fmt"
@@ -12,13 +11,13 @@ import (
 	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
+	"github.com/ledgerwatch/turbo-geth/core/rawdb"
 	"github.com/ledgerwatch/turbo-geth/core/types"
 	"github.com/ledgerwatch/turbo-geth/crypto/secp256k1"
 	"github.com/ledgerwatch/turbo-geth/eth/stagedsync/stages"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
 	"github.com/ledgerwatch/turbo-geth/log"
 	"github.com/ledgerwatch/turbo-geth/params"
-	"github.com/ledgerwatch/turbo-geth/rlp"
 )
 
 type Stage3Config struct {
@@ -90,10 +89,6 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 	defer logEvery.Stop()
 
 	collectorSenders := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
-	collectorBody := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
-	collectorTx := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
-	buf := bytes.NewBuffer(make([]byte, 4096))
-	txKey := make([]byte, 8)
 
 	errCh := make(chan error)
 	go func() {
@@ -119,46 +114,9 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 				errCh <- j.err
 				return
 			}
-
-			// store transactions in own table, key is the sequence of this table
-			txId := j.baseTxId
-			txIds := make([]uint64, len(j.body.Transactions))
-			for i := 0; i < len(j.body.Transactions); i++ {
-				binary.BigEndian.PutUint64(txKey, txId)
-				txIds[i] = txId
-				txId++
-
-				buf.Reset()
-				if err := rlp.Encode(buf, j.body.Transactions[i]); err != nil {
-					errCh <- j.err
-					return
-				}
-
-				if err := collectorTx.Collect(txKey, buf.Bytes()); err != nil {
-					errCh <- j.err
-					return
-				}
-			}
-
-			// re-write block without transactions
-			buf.Reset()
-			if err := rlp.Encode(buf, types.BodyForStorage{
-				BaseTxId: j.baseTxId,
-				TxAmount: uint32(len(j.body.Transactions)),
-				Uncles:   j.body.Uncles,
-			}); err != nil {
-				errCh <- j.err
-				return
-			}
-			if err := collectorBody.Collect(j.key, buf.Bytes()); err != nil {
-				errCh <- j.err
-				return
-			}
-
 		}
 	}()
 
-	reader := bytes.NewReader(nil)
 	if err := db.Walk(dbutils.BlockBodyPrefix, dbutils.EncodeBlockNumber(s.BlockNumber+1), 0, func(k, v []byte) (bool, error) {
 		if err := common.Stopped(quitCh); err != nil {
 			return false, err
@@ -174,24 +132,14 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 			// non-canonical case
 			return true, nil
 		}
-
-		body := new(types.Body) // read body in network format and convert them into storage format
-		reader.Reset(v)
-		if err := rlp.Decode(reader, body); err != nil {
-			return false, fmt.Errorf("[%s]: invalid block body RLP: %w", logPrefix, err)
-		}
-
-		txId, err := db.Sequence(dbutils.EthTx, uint64(len(body.Transactions)))
-		if err != nil {
-			return false, err
-		}
+		body := rawdb.ReadBody(db, blockHash, blockNumber)
 
 		select {
 		case err := <-errCh:
 			if err != nil {
 				return false, err
 			}
-		case jobs <- &senderRecoveryJob{body: body, baseTxId: txId, key: k, blockNumber: blockNumber, index: int(blockNumber - s.BlockNumber - 1)}:
+		case jobs <- &senderRecoveryJob{body: body, key: k, blockNumber: blockNumber, index: int(blockNumber - s.BlockNumber - 1)}:
 		}
 
 		return true, nil
@@ -226,28 +174,11 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 		return err
 	}
 
-	if err := collectorTx.Load(logPrefix, db,
-		dbutils.EthTx,
-		etl.IdentityLoadFunc,
-		etl.TransformArgs{Quit: quitCh},
-	); err != nil {
-		return err
-	}
-
-	if err := collectorBody.Load(logPrefix, db,
-		dbutils.BlockBodyPrefix,
-		etl.IdentityLoadFunc,
-		etl.TransformArgs{Quit: quitCh},
-	); err != nil {
-		return err
-	}
-
 	return s.DoneAndUpdate(db, to)
 }
 
 type senderRecoveryJob struct {
 	body        *types.Body
-	baseTxId    uint64
 	key         []byte
 	blockNumber uint64
 	index       int

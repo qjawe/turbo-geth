@@ -1918,7 +1918,7 @@ func mint(chaindata string, block uint64) error {
 		c = tx.Cursor(dbutils.BlockBodyPrefix)
 		var prevBlock uint64
 		var burntGas uint64
-		for k, v, err := c.Seek(blockEncoded); k != nil; k, v, err = c.Next() {
+		for k, _, err := c.Seek(blockEncoded); k != nil; k, _, err = c.Next() {
 			if err != nil {
 				return err
 			}
@@ -1931,14 +1931,7 @@ func mint(chaindata string, block uint64) error {
 				fmt.Printf("Gap [%d-%d]\n", prevBlock, blockNumber-1)
 			}
 			prevBlock = blockNumber
-			bodyRlp, err := rawdb.DecompressBlockBody(v)
-			if err != nil {
-				return err
-			}
-			body := new(types.Body)
-			if err := rlp.Decode(bytes.NewReader(bodyRlp), body); err != nil {
-				return fmt.Errorf("invalid block body RLP: %w", err)
-			}
+			body := rawdb.ReadBody(db, blockHash, blockNumber)
 			header := rawdb.ReadHeader(db, blockHash, blockNumber)
 			senders := rawdb.ReadSenders(db, blockHash, blockNumber)
 			var ethSpent uint256.Int
