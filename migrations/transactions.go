@@ -6,9 +6,10 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/golang/snappy"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
+	"github.com/ledgerwatch/turbo-geth/common/debug"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
-	"github.com/ledgerwatch/turbo-geth/core/rawdb"
 	"github.com/ledgerwatch/turbo-geth/core/types"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
 	"github.com/ledgerwatch/turbo-geth/log"
@@ -22,6 +23,18 @@ var transactionsTable = Migration{
 		defer logEvery.Stop()
 		logPrefix := "tx_table"
 
+		decompressBlockBody := func(compressed []byte) ([]byte, error) {
+			if !debug.IsBlockCompressionEnabled() || len(compressed) == 0 {
+				return compressed, nil
+			}
+
+			var err error
+			bodyRlp, err := snappy.Decode(nil, compressed)
+			if err != nil {
+				return nil, fmt.Errorf("err on decode block: %w", err)
+			}
+			return bodyRlp, nil
+		}
 		const loadStep = "load"
 		reader := bytes.NewReader(nil)
 		buf := bytes.NewBuffer(make([]byte, 4096))
@@ -80,17 +93,20 @@ var transactionsTable = Migration{
 			collectorT.Close(logPrefix)
 		}()
 
-		if err = db.Walk(dbutils.BlockBodyPrefix, nil, 0, func(k, v []byte) (bool, error) {
+		if err = db.Walk(dbutils.BlockBodyPrefix2, nil, 0, func(k, v []byte) (bool, error) {
 			select {
 			default:
 			case <-logEvery.C:
 				blockNum := binary.BigEndian.Uint64(k[:8])
+				if blockNum > 4_000_000 {
+					return false, nil
+				}
 				log.Info(fmt.Sprintf("[%s] Progress2", logPrefix), "blockNum", blockNum)
 			}
 			// don't need canonical check
 
 			var bodyRlp []byte
-			bodyRlp, err = rawdb.DecompressBlockBody(v)
+			bodyRlp, err = decompressBlockBody(v)
 			if err != nil {
 				return false, err
 			}
