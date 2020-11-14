@@ -163,8 +163,12 @@ func (h *Header) EmptyReceipts() bool {
 // a block's data contents (transactions and uncles) together.
 type Body struct {
 	Transactions []*Transaction
-	TxIds        []uint64
 	Uncles       []*Header
+}
+
+type BodyForStorage struct {
+	TxIds  []uint64
+	Uncles []*Header
 }
 
 // Block represents an entire block in the Ethereum blockchain.

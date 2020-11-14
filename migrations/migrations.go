@@ -68,7 +68,8 @@ var migrations = []Migration{
 	receiptsOnePerTx,
 	accChangeSetDupSort,
 	storageChangeSetDupSort,
-}
+	transactionsTable,
+			}
 
 type Migration struct {
 	Name string

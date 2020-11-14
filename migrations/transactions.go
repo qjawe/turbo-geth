@@ -24,29 +24,32 @@ var transactionsTable = Migration{
 
 		const loadStep = "load"
 		reader := bytes.NewReader(nil)
+		buf := bytes.NewBuffer(make([]byte, 4096))
+		body := new(types.Body)
+		newK := make([]byte, 8)
 
-		collectorR, err1 := etl.NewCollectorFromFiles(tmpdir + "1")
+		collectorB, err1 := etl.NewCollectorFromFiles(tmpdir + "1") // B - stands for blocks
 		if err1 != nil {
 			return err1
 		}
-		collectorL, err1 := etl.NewCollectorFromFiles(tmpdir + "2")
+		collectorT, err1 := etl.NewCollectorFromFiles(tmpdir + "2") // T - stands for transactions
 		if err1 != nil {
 			return err1
 		}
 		switch string(progress) {
 		case "":
 			// can't use files if progress field not set, clear them
-			if collectorR != nil {
-				collectorR.Close(logPrefix)
-				collectorR = nil
+			if collectorB != nil {
+				collectorB.Close(logPrefix)
+				collectorB = nil
 			}
 
-			if collectorL != nil {
-				collectorL.Close(logPrefix)
-				collectorL = nil
+			if collectorT != nil {
+				collectorT.Close(logPrefix)
+				collectorT = nil
 			}
 		case loadStep:
-			if collectorR == nil || collectorL == nil {
+			if collectorB == nil || collectorT == nil {
 				return ErrMigrationETLFilesDeleted
 			}
 			defer func() {
@@ -57,14 +60,14 @@ var transactionsTable = Migration{
 				if rec := recover(); rec != nil {
 					panic(rec)
 				}
-				collectorR.Close(logPrefix)
-				collectorL.Close(logPrefix)
+				collectorB.Close(logPrefix)
+				collectorT.Close(logPrefix)
 			}()
 			goto LoadStep
 		}
 
-		collectorR = etl.NewCriticalCollector(tmpdir+"1", etl.NewSortableBuffer(etl.BufferOptimalSize*4))
-		collectorL = etl.NewCriticalCollector(tmpdir+"2", etl.NewSortableBuffer(etl.BufferOptimalSize*4))
+		collectorB = etl.NewCriticalCollector(tmpdir+"1", etl.NewSortableBuffer(etl.BufferOptimalSize*4))
+		collectorT = etl.NewCriticalCollector(tmpdir+"2", etl.NewSortableBuffer(etl.BufferOptimalSize*4))
 		defer func() {
 			// don't clean if error or panic happened
 			if err != nil {
@@ -73,60 +76,65 @@ var transactionsTable = Migration{
 			if rec := recover(); rec != nil {
 				panic(rec)
 			}
-			collectorR.Close(logPrefix)
-			collectorL.Close(logPrefix)
+			collectorB.Close(logPrefix)
+			collectorT.Close(logPrefix)
 		}()
 
-		if err = db.Walk(dbutils.BlockBodyPrefix, nil, 0, func(k, v []byte) (bool, error) {
-			blockNum := binary.BigEndian.Uint64(k[:8])
+		if err = db.Walk(dbutils.BlockBodyPrefix2, nil, 0, func(k, v []byte) (bool, error) {
 			select {
 			default:
 			case <-logEvery.C:
+				blockNum := binary.BigEndian.Uint64(k[:8])
 				log.Info(fmt.Sprintf("[%s] Progress2", logPrefix), "blockNum", blockNum)
 			}
+			// don't need canonical check
 
-			hash, err := rawdb.ReadCanonicalHash(db, blockNum)
+			bodyRlp, err := rawdb.DecompressBlockBody(v)
 			if err != nil {
 				return false, err
 			}
-			if !bytes.Equal(hash.Bytes(), k[8:]) {
 
+			reader.Reset(bodyRlp)
+			if err = rlp.Decode(reader, body); err != nil {
+				return false, fmt.Errorf("[%s]: invalid block body RLP: %w", logPrefix, err)
 			}
 
-			body := new(types.Body)
-			reader.Reset(v)
-			if err := rlp.Decode(reader, body); err != nil {
-				return false, fmt.Errorf("%s: invalid block body RLP: %w", logPrefix, err)
+			txIds := make([]uint64, len(body.Transactions))
+			txId, err := db.Sequence(dbutils.EthTx, uint64(len(body.Transactions)))
+			if err != nil {
+				return false, nil
 			}
-
-			ids := make([]uint64, len(body.Transactions))
 			for i, txn := range body.Transactions {
-				newK := make([]byte, 8)
-				// TODO: get sequence
-				txId := uint64(1)
-				ids[i] = txId
+				binary.BigEndian.PutUint64(newK, txId)
+				txIds[i] = txId
+				txId++
 
-				txnBytes, err := rlp.EncodeToBytes(txn)
-				if err != nil {
+				buf.Reset()
+				if err = rlp.Encode(buf, txn); err != nil {
 					return false, err
 				}
 
-				binary.BigEndian.PutUint64(newK, txId)
-				err = collectorR.Collect(newK, txnBytes)
-				if err != nil {
+				if err = collectorT.Collect(newK, buf.Bytes()); err != nil {
 					return false, err
 				}
 			}
 
-			body.Transactions = nil
-			body.TxIds = ids
-
+			buf.Reset()
+			if err = rlp.Encode(buf, types.BodyForStorage{
+				TxIds:  txIds,
+				Uncles: body.Uncles,
+			}); err != nil {
+				return false, err
+			}
+			if err = collectorB.Collect(k, buf.Bytes()); err != nil {
+				return false, err
+			}
 			return true, nil
 		}); err != nil {
 			return err
 		}
 
-		if err = db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.EthTx); err != nil {
+		if err = db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.EthTx, dbutils.BlockBodyPrefix); err != nil {
 			return fmt.Errorf("clearing the receipt bucket: %w", err)
 		}
 
@@ -136,12 +144,13 @@ var transactionsTable = Migration{
 		}
 
 	LoadStep:
-		// Commit again
-		if err = CommitProgress(db, []byte(loadStep), false); err != nil {
-			return fmt.Errorf("committing the removal of receipt table: %w", err)
-		}
 		// Now transaction would have been re-opened, and we should be re-using the space
-		if err = collectorR.Load(logPrefix, db, dbutils.EthTx, etl.IdentityLoadFunc, etl.TransformArgs{
+		if err = collectorT.Load(logPrefix, db, dbutils.EthTx, etl.IdentityLoadFunc, etl.TransformArgs{
+			OnLoadCommit: CommitProgress,
+		}); err != nil {
+			return fmt.Errorf("loading the transformed data back into the receipts table: %w", err)
+		}
+		if err = collectorB.Load(logPrefix, db, dbutils.BlockBodyPrefix, etl.IdentityLoadFunc, etl.TransformArgs{
 			OnLoadCommit: CommitProgress,
 		}); err != nil {
 			return fmt.Errorf("loading the transformed data back into the receipts table: %w", err)
