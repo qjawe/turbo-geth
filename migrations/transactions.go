@@ -101,11 +101,12 @@ var transactionsTable = Migration{
 			}
 
 			txIds := make([]uint64, len(body.Transactions))
-			var txId uint64
-			txId, err = db.Sequence(dbutils.EthTx, uint64(len(body.Transactions)))
+			var txId, baseTxId uint64
+			baseTxId, err = db.Sequence(dbutils.EthTx, uint64(len(body.Transactions)))
 			if err != nil {
 				return false, nil
 			}
+			txId = baseTxId
 			for i, txn := range body.Transactions {
 				binary.BigEndian.PutUint64(newK, txId)
 				txIds[i] = txId
@@ -123,8 +124,9 @@ var transactionsTable = Migration{
 
 			buf.Reset()
 			if err = rlp.Encode(buf, types.BodyForStorage{
-				TxIds:  txIds,
-				Uncles: body.Uncles,
+				BaseTxId: baseTxId,
+				TxAmount: uint32(len(body.Transactions)),
+				Uncles:   body.Uncles,
 			}); err != nil {
 				return false, err
 			}

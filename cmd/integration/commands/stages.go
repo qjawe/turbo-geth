@@ -640,7 +640,7 @@ func stageTxLookup(db ethdb.Database, ctx context.Context) error {
 	return stagedsync.SpawnTxLookup(stage9, db, tmpdir, ch)
 }
 
-func printAllStages(db rawdb.DatabaseReader, _ context.Context) error {
+func printAllStages(db ethdb.Getter, _ context.Context) error {
 	return printStages(db)
 }
 
