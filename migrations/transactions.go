@@ -101,7 +101,8 @@ var transactionsTable = Migration{
 			}
 
 			txIds := make([]uint64, len(body.Transactions))
-			txId, err := db.Sequence(dbutils.EthTx, uint64(len(body.Transactions)))
+			var txId uint64
+			txId, err = db.Sequence(dbutils.EthTx, uint64(len(body.Transactions)))
 			if err != nil {
 				return false, nil
 			}
