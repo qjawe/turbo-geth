@@ -39,7 +39,7 @@ func DecompressBlockBody(compressed []byte) ([]byte, error) {
 }
 
 // ReadAccount reading account object from multiple buckets of db
-func ReadAccount(db DatabaseReader, addrHash common.Hash, acc *accounts.Account) (bool, error) {
+func ReadAccount(db databaseReader, addrHash common.Hash, acc *accounts.Account) (bool, error) {
 	addrHashBytes := addrHash[:]
 	enc, err := db.Get(dbutils.CurrentStateBucket, addrHashBytes)
 	if err != nil {
@@ -63,7 +63,7 @@ func DeleteAccount(db DatabaseDeleter, addrHash common.Hash) error {
 	return db.Delete(dbutils.CurrentStateBucket, addrHash[:], nil)
 }
 
-func PlainReadAccount(db DatabaseReader, address common.Address, acc *accounts.Account) (bool, error) {
+func PlainReadAccount(db databaseReader, address common.Address, acc *accounts.Account) (bool, error) {
 	enc, err := db.Get(dbutils.PlainStateBucket, address[:])
 	if err != nil {
 		return false, err

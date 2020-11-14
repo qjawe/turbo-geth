@@ -1114,7 +1114,7 @@ func ValidateTxLookups2(chaindata string) {
 	log.Info("All done", "duration", time.Since(startTime))
 }
 
-func validateTxLookups2(db rawdb.DatabaseReader, startBlock uint64, interruptCh chan bool) {
+func validateTxLookups2(db ethdb.Database, startBlock uint64, interruptCh chan bool) {
 	blockNum := startBlock
 	iterations := 0
 	var interrupt bool

@@ -89,7 +89,7 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 	logEvery := time.NewTicker(30 * time.Second)
 	defer logEvery.Stop()
 
-	collector := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
+	collectorSenders := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
 	collectorBody := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
 	collectorTx := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
 	buf := bytes.NewBuffer(make([]byte, 4096))
@@ -114,7 +114,7 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 			}
 			k := make([]byte, 4)
 			binary.BigEndian.PutUint32(k, uint32(j.index))
-			if err := collector.Collect(k, j.senders); err != nil {
+			if err := collectorSenders.Collect(k, j.senders); err != nil {
 				errCh <- j.err
 				return
 			}
@@ -142,8 +142,9 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 			// re-write block without transactions
 			buf.Reset()
 			if err := rlp.Encode(buf, types.BodyForStorage{
-				TxIds:  txIds,
-				Uncles: j.body.Uncles,
+				BaseTxId: j.baseTxId,
+				TxAmount: uint32(len(j.body.Transactions)),
+				Uncles:   j.body.Uncles,
 			}); err != nil {
 				errCh <- j.err
 				return
@@ -158,7 +159,7 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 
 	reader := bytes.NewReader(nil)
 
-	if err := db.Walk(dbutils.BlockBodyPrefix, dbutils.EncodeBlockNumber(s.BlockNumber+1), 0, func(k, v []byte) (bool, error) {
+	if err := db.Walk(dbutils.BlockBodyPrefix2, dbutils.EncodeBlockNumber(s.BlockNumber+1), 0, func(k, v []byte) (bool, error) {
 		if err := common.Stopped(quitCh); err != nil {
 			return false, err
 		}
@@ -219,7 +220,7 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 		return next(k, dbutils.BlockBodyKey(s.BlockNumber+uint64(index)+1, canonical[index]), value)
 	}
 
-	if err := collector.Load(logPrefix, db,
+	if err := collectorSenders.Load(logPrefix, db,
 		dbutils.Senders,
 		loadFunc,
 		etl.TransformArgs{
