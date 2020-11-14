@@ -152,12 +152,12 @@ var transactionsTable = Migration{
 		if err = collectorT.Load(logPrefix, db, dbutils.EthTx, etl.IdentityLoadFunc, etl.TransformArgs{
 			OnLoadCommit: CommitProgress,
 		}); err != nil {
-			return fmt.Errorf("loading the transformed data back into the receipts table: %w", err)
+			return fmt.Errorf("loading the transformed data back into the eth_tx table: %w", err)
 		}
 		if err = collectorB.Load(logPrefix, db, dbutils.BlockBodyPrefix, etl.IdentityLoadFunc, etl.TransformArgs{
 			OnLoadCommit: CommitProgress,
 		}); err != nil {
-			return fmt.Errorf("loading the transformed data back into the receipts table: %w", err)
+			return fmt.Errorf("loading the transformed data back into the bodies table: %w", err)
 		}
 		return nil
 	},
