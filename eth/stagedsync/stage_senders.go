@@ -36,6 +36,7 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 	if errStart != nil {
 		return errStart
 	}
+
 	var to = prevStageProgress
 	if toBlock > 0 {
 		to = min(prevStageProgress, toBlock)
@@ -111,6 +112,7 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 			case <-logEvery.C:
 				log.Info(fmt.Sprintf("[%s] Recovery", logPrefix), "block_number", j.index)
 			}
+
 			k := make([]byte, 4)
 			binary.BigEndian.PutUint32(k, uint32(j.index))
 			if err := collectorSenders.Collect(k, j.senders); err != nil {
@@ -132,7 +134,6 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 					return
 				}
 
-				fmt.Printf("2: %x %x\n", txKey, buf.Bytes())
 				if err := collectorTx.Collect(txKey, buf.Bytes()); err != nil {
 					errCh <- j.err
 					return
@@ -149,7 +150,6 @@ func SpawnRecoverSendersStage(cfg Stage3Config, s *StageState, db ethdb.Database
 				errCh <- j.err
 				return
 			}
-			fmt.Printf("1: %x %x\n", j.key, buf.Bytes())
 			if err := collectorBody.Collect(j.key, buf.Bytes()); err != nil {
 				errCh <- j.err
 				return
