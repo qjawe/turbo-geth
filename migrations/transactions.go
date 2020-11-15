@@ -17,7 +17,7 @@ import (
 )
 
 var transactionsTable = Migration{
-	Name: "tx_table_3",
+	Name: "tx_table_4",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
 		logEvery := time.NewTicker(30 * time.Second)
 		defer logEvery.Stop()
@@ -98,9 +98,9 @@ var transactionsTable = Migration{
 			default:
 			case <-logEvery.C:
 				blockNum := binary.BigEndian.Uint64(k[:8])
-				if blockNum > 4_000_000 {
-					return false, nil
-				}
+				//if blockNum > 4_000_000 {
+				//	return false, nil
+				//}
 				log.Info(fmt.Sprintf("[%s] Progress2", logPrefix), "blockNum", blockNum)
 			}
 			// don't need canonical check
