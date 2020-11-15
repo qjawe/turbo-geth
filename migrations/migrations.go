@@ -69,7 +69,7 @@ var migrations = []Migration{
 	accChangeSetDupSort,
 	storageChangeSetDupSort,
 	transactionsTable,
-			}
+}
 
 type Migration struct {
 	Name string

@@ -17,7 +17,7 @@ import (
 )
 
 var transactionsTable = Migration{
-	Name: "tx_table_2",
+	Name: "tx_table_3",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
 		logEvery := time.NewTicker(30 * time.Second)
 		defer logEvery.Stop()
@@ -93,7 +93,7 @@ var transactionsTable = Migration{
 			collectorT.Close(logPrefix)
 		}()
 
-		if err = db.Walk(dbutils.BlockBodyPrefix2, nil, 0, func(k, v []byte) (bool, error) {
+		if err = db.Walk(dbutils.BlockBodyPrefix, nil, 0, func(k, v []byte) (bool, error) {
 			select {
 			default:
 			case <-logEvery.C:

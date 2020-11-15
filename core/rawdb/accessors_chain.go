@@ -352,6 +352,7 @@ func HasBody(db databaseReader, hash common.Hash, number uint64) bool {
 func ReadBody(db ethdb.Database, hash common.Hash, number uint64) *types.Body {
 	data := ReadStorageBodyRLP(db, hash, number)
 	if len(data) == 0 {
+
 		return nil
 	}
 	bodyForStorage := new(types.BodyForStorage)
