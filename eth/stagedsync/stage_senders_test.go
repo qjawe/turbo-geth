@@ -67,36 +67,14 @@ func TestSenders(t *testing.T) {
 	assert.NoError(t, err)
 
 	{
-		found := rawdb.ReadBody(db, common.HexToHash("01"), 1)
-		assert.NotNil(t, found)
-		assert.Equal(t, 2, len(found.Transactions))
-		found = rawdb.ReadBody(db, common.HexToHash("02"), 2)
-		assert.NotNil(t, found)
-		assert.NotNil(t, 3, len(found.Transactions))
-		found = rawdb.ReadBody(db, common.HexToHash("03"), 3)
-		assert.NotNil(t, found)
-		assert.NotNil(t, 0, len(found.Transactions))
-		assert.NotNil(t, 2, len(found.Uncles))
-	}
-
-	{
 		senders := rawdb.ReadSenders(db, common.HexToHash("01"), 1)
 		assert.Equal(t, 2, len(senders))
+		assert.Equal(t, testAddr, senders[0])
 		senders = rawdb.ReadSenders(db, common.HexToHash("02"), 2)
 		assert.Equal(t, 3, len(senders))
+		assert.Equal(t, testAddr, senders[0])
 		senders = rawdb.ReadSenders(db, common.HexToHash("03"), 3)
 		assert.Equal(t, 0, len(senders))
-	}
-	{
-		txs, err := rawdb.ReadTransactions(db, 0, 2)
-		assert.NoError(t, err)
-		assert.Equal(t, 2, len(txs))
-		txs, err = rawdb.ReadTransactions(db, 2, 3)
-		assert.NoError(t, err)
-		assert.Equal(t, 3, len(txs))
-		txs, err = rawdb.ReadTransactions(db, 0, 1024)
-		assert.NoError(t, err)
-		assert.Equal(t, 5, len(txs))
 	}
 
 }
