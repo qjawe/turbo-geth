@@ -28,7 +28,6 @@ var transactionsTable = Migration{
 				return compressed, nil
 			}
 
-			var err error
 			bodyRlp, err := snappy.Decode(nil, compressed)
 			if err != nil {
 				return nil, fmt.Errorf("err on decode block: %w", err)

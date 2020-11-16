@@ -247,9 +247,9 @@ func CheckBlocks(blockNum uint64, chaindata string, historyfile string) error {
 
 	if err := historyDb.Walk(dbutils.BlockBodyPrefix, nil, 0, func(k, v []byte) (bool, error) {
 		fmt.Printf("%d, %d\n", len(k), len(v))
-		blockNum := binary.BigEndian.Uint64(k[:8])
-		if blockNum%1000 == 0 {
-			log.Info("Checked", "blocks", blockNum)
+		blockN, blockHash := binary.BigEndian.Uint64(k[:8]), common.BytesToHash(k[8:])
+		if blockN%1000 == 0 {
+			log.Info("Checked", "blocks", blockN)
 		}
 
 		body := new(types.Body)
@@ -258,7 +258,7 @@ func CheckBlocks(blockNum uint64, chaindata string, historyfile string) error {
 			return false, fmt.Errorf("[%s]: invalid block body RLP: %w", "", err)
 		}
 
-		b2 := rawdb.ReadBody(chainDb, common.BytesToHash(k[8:]), blockNum)
+		b2 := rawdb.ReadBody(chainDb, blockHash, blockN)
 		if types.DeriveSha(types.Transactions(b2.Transactions)) != types.DeriveSha(types.Transactions(body.Transactions)) || types.CalcUncleHash(b2.Uncles) != types.CalcUncleHash(body.Uncles) {
 			panic(fmt.Sprintf("block: %d, not match", blockNum))
 		}
@@ -266,8 +266,8 @@ func CheckBlocks(blockNum uint64, chaindata string, historyfile string) error {
 		// Check for interrupts
 		select {
 		case <-interruptCh:
-			return false, nil
 			fmt.Println("interrupted, please wait for cleanup...")
+			return false, nil
 		default:
 		}
 		return true, nil
