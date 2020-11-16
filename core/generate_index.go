@@ -77,7 +77,7 @@ func (ig *IndexGenerator) Truncate(timestampTo uint64, changeSetBucket string) e
 
 	currentKey := dbutils.EncodeBlockNumber(timestampTo)
 	keys := make(map[string]struct{})
-	if err := changeset.Walk(ig.db, changeSetBucket, currentKey, 0, func(blockN uint64, k, v []byte) (bool, error) {
+	if err := changeset.Walk(ig.db, changeSetBucket, currentKey, 0, func(blockN uint64, k, _ []byte) (bool, error) {
 		if err := common.Stopped(ig.quitCh); err != nil {
 			return false, err
 		}
@@ -101,19 +101,29 @@ func (ig *IndexGenerator) Truncate(timestampTo uint64, changeSetBucket string) e
 		binary.BigEndian.PutUint64(startKey[keySize:], timestampTo)
 		if err := ig.db.Walk(vv.IndexBucket, startKey, 8*keySize, func(k, v []byte) (bool, error) {
 			timestamp := binary.BigEndian.Uint64(k[keySize:]) // the last timestamp in the chunk
+			if timestamp <= timestampTo {
+				return true, nil
+			}
+
 			kStr := string(common.CopyBytes(k))
-			if timestamp > timestampTo {
+
+			// Truncated chunk becomes "the last chunk" with the timestamp 0xffff....ffff
+			// - "last but one chunk" will become "the last chunk" only if it exists.
+			// - and "the last chunk" need to be deleted only if "last but one chunk" was not converted to "the last"
+			if _, ok := historyEffects[kStr]; !ok {
 				historyEffects[kStr] = nil
-				// truncate the chunk
-				index := dbutils.WrapHistoryIndex(v)
-				index = index.TruncateGreater(timestampTo)
-				if len(index) > 8 { // If the chunk is empty after truncation, it gets simply deleted
-					// Truncated chunk becomes "the last chunk" with the timestamp 0xffff....ffff
-					lastK := make([]byte, len(k))
-					copy(lastK, k[:keySize])
-					binary.BigEndian.PutUint64(lastK[keySize:], ^uint64(0))
-					historyEffects[string(lastK)] = common.CopyBytes(index)
-				}
+			}
+
+			// truncate the chunk
+			index := dbutils.WrapHistoryIndex(v)
+
+			index = index.TruncateGreater(timestampTo)
+
+			if len(index) > 8 { // If the chunk is empty after truncation, it gets simply deleted
+				lastK := make([]byte, len(k))
+				copy(lastK, k[:keySize])
+				binary.BigEndian.PutUint64(lastK[keySize:], ^uint64(0))
+				historyEffects[string(lastK)] = common.CopyBytes(index)
 			}
 			return true, nil
 		}); err != nil {
