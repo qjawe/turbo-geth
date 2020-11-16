@@ -3,6 +3,7 @@ package stateless
 import (
 	"bytes"
 	"context"
+	"encoding/binary"
 	"fmt"
 	"os"
 	"os/signal"
@@ -22,6 +23,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/eth/stagedsync/stages"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
 	"github.com/ledgerwatch/turbo-geth/log"
+	"github.com/ledgerwatch/turbo-geth/rlp"
 )
 
 // CheckChangeSets re-executes historical transactions in read-only mode
@@ -154,21 +156,21 @@ func CheckChangeSets(genesis *core.Genesis, blockNum uint64, chaindata string, h
 			}
 
 			if !match {
-				//fmt.Printf("\n\n")
-				//fmt.Printf("All in DB: ==========================\n")
-				//j := 0
-				//err = changeset.Walk(historyDb, dbutils.PlainAccountChangeSetBucket, dbutils.EncodeBlockNumber(blockNum), 8*8, func(blockN uint64, k, v []byte) (bool, error) {
-				//	fmt.Printf("%d: 0x%x: %x\n", j, k, v)
-				//	j++
-				//	return true, nil
-				//})
-				//if err != nil {
-				//	return err
-				//}
-				//fmt.Printf("All Expected: ==========================\n")
-				//for ii, c := range accountChanges.Changes {
-				//	fmt.Printf("%d: 0x%x: %x\n", ii, c.Key, c.Value)
-				//}
+				fmt.Printf("\n\n")
+				fmt.Printf("All in DB: ==========================\n")
+				j := 0
+				err = changeset.Walk(historyDb, dbutils.PlainAccountChangeSetBucket, dbutils.EncodeBlockNumber(blockNum), 8*8, func(blockN uint64, k, v []byte) (bool, error) {
+					fmt.Printf("%d: 0x%x: %x\n", j, k, v)
+					j++
+					return true, nil
+				})
+				if err != nil {
+					return err
+				}
+				fmt.Printf("All Expected: ==========================\n")
+				for ii, c := range accountChanges.Changes {
+					fmt.Printf("%d: 0x%x: %x\n", ii, c.Key, c.Value)
+				}
 
 				return fmt.Errorf("check change set failed")
 			}
@@ -217,6 +219,60 @@ func CheckChangeSets(genesis *core.Genesis, blockNum uint64, chaindata string, h
 		if _, err := batch.Commit(); err != nil {
 			return err
 		}
+	}
+	log.Info("Checked", "blocks", blockNum, "next time specify --block", blockNum, "duration", time.Since(startTime))
+	return nil
+}
+
+func CheckBlocks(blockNum uint64, chaindata string, historyfile string) error {
+	if len(historyfile) == 0 {
+		historyfile = chaindata
+	}
+
+	startTime := time.Now()
+	sigs := make(chan os.Signal, 1)
+	interruptCh := make(chan bool, 1)
+	signal.Notify(sigs, syscall.SIGINT, syscall.SIGTERM)
+	go func() {
+		<-sigs
+		interruptCh <- true
+	}()
+
+	chainDb := ethdb.MustOpen(chaindata)
+	defer chainDb.Close()
+	historyDb := ethdb.MustOpen(historyfile)
+	defer historyDb.Close()
+
+	reader := bytes.NewReader(nil)
+
+	if err := historyDb.Walk(dbutils.BlockBodyPrefix, nil, 0, func(k, v []byte) (bool, error) {
+		fmt.Printf("%d, %d\n", len(k), len(v))
+		blockNum := binary.BigEndian.Uint64(k[:8])
+		if blockNum%1000 == 0 {
+			log.Info("Checked", "blocks", blockNum)
+		}
+
+		body := new(types.Body)
+		reader.Reset(v)
+		if err := rlp.Decode(reader, body); err != nil {
+			return false, fmt.Errorf("[%s]: invalid block body RLP: %w", "", err)
+		}
+
+		b2 := rawdb.ReadBody(chainDb, common.BytesToHash(k[8:]), blockNum)
+		if types.DeriveSha(types.Transactions(b2.Transactions)) != types.DeriveSha(types.Transactions(body.Transactions)) || types.CalcUncleHash(b2.Uncles) != types.CalcUncleHash(body.Uncles) {
+			panic(fmt.Sprintf("block: %d, not match", blockNum))
+		}
+
+		// Check for interrupts
+		select {
+		case <-interruptCh:
+			return false, nil
+			fmt.Println("interrupted, please wait for cleanup...")
+		default:
+		}
+		return true, nil
+	}); err != nil {
+		return err
 	}
 	log.Info("Checked", "blocks", blockNum, "next time specify --block", blockNum, "duration", time.Since(startTime))
 	return nil

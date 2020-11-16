@@ -98,9 +98,6 @@ var transactionsTable = Migration{
 			default:
 			case <-logEvery.C:
 				blockNum := binary.BigEndian.Uint64(k[:8])
-				//if blockNum > 4_000_000 {
-				//	return false, nil
-				//}
 				log.Info(fmt.Sprintf("[%s] Progress2", logPrefix), "blockNum", blockNum)
 			}
 			// don't need canonical check
