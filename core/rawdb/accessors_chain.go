@@ -311,7 +311,7 @@ func ReadTransactions(db ethdb.Database, baseTxId uint64, amount uint32) ([]*typ
 	return txs, nil
 }
 
-func WriteTransactions(db DatabaseWriter, txs []*types.Transaction, baseTxId uint64) error {
+func WriteTransactions(db ethdb.Database, txs []*types.Transaction, baseTxId uint64) error {
 	txId := baseTxId
 	buf := bytes.NewBuffer(nil)
 	for _, tx := range txs {
@@ -323,7 +323,9 @@ func WriteTransactions(db DatabaseWriter, txs []*types.Transaction, baseTxId uin
 		if err := rlp.Encode(buf, tx); err != nil {
 			return fmt.Errorf("broken tx rlp: %w", err)
 		}
-		if err := db.Put(dbutils.EthTx, txIdKey, common.CopyBytes(buf.Bytes())); err != nil {
+
+		// If next Append returns KeyExists error - it means you need to open transaction in App code before calling this func. Batch is also fine.
+		if err := db.Append(dbutils.EthTx, txIdKey, common.CopyBytes(buf.Bytes())); err != nil {
 			return err
 		}
 	}
