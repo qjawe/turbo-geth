@@ -66,13 +66,15 @@ var (
 
 	//key - address hash
 	//value - list of block where it's changed
-	AccountsHistoryBucket  = "hAT2"
-	AccountsHistoryBucket2 = "hAT"
+	AccountsHistoryBucket         = "hAT2"
+	AccountsHistoryBucket2        = "hAT"
+	AccountsCreationHistoryBucket = "hAT3"
 
 	//key - address hash
 	//value - list of block where it's changed
-	StorageHistoryBucket  = "hST2"
-	StorageHistoryBucket2 = "hST"
+	StorageHistoryBucket         = "hST2"
+	StorageHistoryBucket2        = "hST"
+	StorageCreationHistoryBucket = "hST3"
 
 	//key - contract code hash
 	//value - contract code
@@ -210,8 +212,10 @@ var Buckets = []string{
 	CurrentStateBucket,
 	AccountsHistoryBucket,
 	AccountsHistoryBucket2,
+	AccountsCreationHistoryBucket,
 	StorageHistoryBucket,
 	StorageHistoryBucket2,
+	StorageCreationHistoryBucket,
 	CodeBucket,
 	ContractCodeBucket,
 	AccountChangeSetBucket,

@@ -89,20 +89,20 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 	collectorCreates := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
 
 	if err := changeset.Walk(db, changesetBucket, dbutils.EncodeBlockNumber(start), 0, func(blockN uint64, k, v []byte) (bool, error) {
+		k = dbutils.CompositeKeyWithoutIncarnation(k)
 		if blockN >= stop {
 			return false, nil
 		}
 		if err := common.Stopped(quit); err != nil {
 			return false, err
 		}
-		blockNum := binary.BigEndian.Uint64(k[:8])
 
 		select {
 		default:
 		case <-logEvery.C:
 			var m runtime.MemStats
 			runtime.ReadMemStats(&m)
-			log.Info(fmt.Sprintf("[%s] Progress", logPrefix), "number", blockNum, "alloc", common.StorageSize(m.Alloc), "sys", common.StorageSize(m.Sys))
+			log.Info(fmt.Sprintf("[%s] Progress", logPrefix), "number", blockN, "alloc", common.StorageSize(m.Alloc), "sys", common.StorageSize(m.Sys))
 		case <-checkFlushEvery.C:
 			if needFlush(updates, logIndicesMemLimit) {
 				if err := flushBitmaps(collectorUpdates, updates); err != nil {
@@ -119,13 +119,23 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 			}
 		}
 
+		kStr := string(common.CopyBytes(k))
 		if len(v) == 0 {
-			creates[string(k)].Add(uint32(blockNum))
-		} else {
-			updates[string(k)].Add(uint32(blockNum))
+			m, ok := creates[kStr]
+			if !ok {
+				m = roaring.New()
+				creates[kStr] = m
+			}
+			m.Add(uint32(blockN))
 		}
+		m, ok := updates[kStr]
+		if !ok {
+			m = roaring.New()
+			updates[kStr] = m
+		}
+		m.Add(uint32(blockN))
 
-		return false, nil
+		return true, nil
 	}); err != nil {
 		return err
 	}
