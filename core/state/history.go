@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/common/changeset"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
@@ -46,12 +47,14 @@ func FindByHistory(tx ethdb.Tx, storage bool, key []byte, timestamp uint64) ([]b
 	} else {
 		hBucket = dbutils.AccountsHistoryBucket
 	}
-	c := tx.Cursor(hBucket)
-	defer c.Close()
-	k, v, seekErr := c.Seek(dbutils.IndexChunkKey(key, timestamp))
+
+	ch := tx.Cursor(hBucket)
+	defer ch.Close()
+	k, v, seekErr := ch.Seek(dbutils.IndexChunkKey32(key, uint32(timestamp)))
 	if seekErr != nil {
 		return nil, seekErr
 	}
+
 	if k == nil {
 		return nil, ethdb.ErrKeyNotFound
 	}
@@ -65,16 +68,28 @@ func FindByHistory(tx ethdb.Tx, storage bool, key []byte, timestamp uint64) ([]b
 			return nil, ethdb.ErrKeyNotFound
 		}
 	}
-	index := dbutils.WrapHistoryIndex(v)
+	index := roaring.New()
+	if _, err := index.ReadFrom(bytes.NewReader(v)); err != nil {
+		return nil, err
+	}
+	i := index.Iterator()
+	i.AdvanceIfNeeded(uint32(timestamp))
+	ok := i.HasNext()
+	var changeSetBlock uint64
+	if ok {
+		changeSetBlock = uint64(i.Next())
+	}
 
-	changeSetBlock, set, ok := index.Search(timestamp)
+	//if timestamp <= 49891 {
+	//	fmt.Printf("2: %d->%d, %t %x\n", timestamp, changeSetBlock, ok, key)
+	//}
 	var data []byte
 	if ok {
 		// set == true if this change was from empty record (non-existent account) to non-empty
 		// In such case, we do not need to examine changeSet and return empty data
-		if set && !storage {
-			return []byte{}, nil
-		}
+		//if set && !storage {
+		//	return []byte{}, nil
+		//}
 		csBucket, _ := dbutils.ChangeSetByIndexBucket(storage)
 		c := tx.CursorDupSort(csBucket)
 		defer c.Close()

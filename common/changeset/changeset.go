@@ -181,16 +181,18 @@ func Truncate(tx ethdb.Tx, from uint64) error {
 }
 
 var Mapper = map[string]struct {
-	IndexBucket   string
-	WalkerAdapter func(cursor ethdb.CursorDupSort) Walker2
-	KeySize       int
-	Template      string
-	New           func() *ChangeSet
-	Encode        Encoder
-	Decode        Decoder
+	IndexBucket         string
+	IndexCreationBucket string
+	WalkerAdapter       func(cursor ethdb.CursorDupSort) Walker2
+	KeySize             int
+	Template            string
+	New                 func() *ChangeSet
+	Encode              Encoder
+	Decode              Decoder
 }{
 	dbutils.AccountChangeSetBucket: {
-		IndexBucket: dbutils.AccountsHistoryBucket,
+		IndexBucket:         dbutils.AccountsHistoryBucket,
+		IndexCreationBucket: dbutils.AccountsCreationHistoryBucket,
 		WalkerAdapter: func(c ethdb.CursorDupSort) Walker2 {
 			return AccountChangeSet{c: c}
 		},
@@ -201,7 +203,8 @@ var Mapper = map[string]struct {
 		Decode:   FromDBFormat(common.HashLength),
 	},
 	dbutils.StorageChangeSetBucket: {
-		IndexBucket: dbutils.StorageHistoryBucket,
+		IndexBucket:         dbutils.StorageHistoryBucket,
+		IndexCreationBucket: dbutils.StorageCreationHistoryBucket,
 		WalkerAdapter: func(c ethdb.CursorDupSort) Walker2 {
 			return StorageChangeSet{c: c}
 		},
@@ -212,7 +215,8 @@ var Mapper = map[string]struct {
 		Decode:   FromDBFormat(common.HashLength),
 	},
 	dbutils.PlainAccountChangeSetBucket: {
-		IndexBucket: dbutils.AccountsHistoryBucket,
+		IndexBucket:         dbutils.AccountsHistoryBucket,
+		IndexCreationBucket: dbutils.AccountsCreationHistoryBucket,
 		WalkerAdapter: func(c ethdb.CursorDupSort) Walker2 {
 			return AccountChangeSetPlain{c: c}
 		},
@@ -223,7 +227,8 @@ var Mapper = map[string]struct {
 		Decode:   FromDBFormat(common.AddressLength),
 	},
 	dbutils.PlainStorageChangeSetBucket: {
-		IndexBucket: dbutils.StorageHistoryBucket,
+		IndexBucket:         dbutils.StorageHistoryBucket,
+		IndexCreationBucket: dbutils.StorageCreationHistoryBucket,
 		WalkerAdapter: func(c ethdb.CursorDupSort) Walker2 {
 			return StorageChangeSetPlain{c: c}
 		},
