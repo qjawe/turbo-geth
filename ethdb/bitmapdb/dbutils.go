@@ -55,10 +55,10 @@ func CutLeft(bm *roaring.Bitmap, targetSize uint64) *roaring.Bitmap {
 // TruncateRange - gets existing bitmap in db and call RemoveRange operator on it.
 // starts from hot shard, stops when shard not overlap with [from-to)
 // !Important: [from, to)
-func TruncateRange(tx ethdb.Tx, bucket string, key []byte, from, to uint64) error {
+func TruncateRange(tx ethdb.Tx, bucket string, key []byte, to uint64) error {
 	chunkKey := make([]byte, len(key)+4)
 	copy(chunkKey, key)
-	binary.BigEndian.PutUint32(chunkKey[len(chunkKey)-4:], uint32(from))
+	binary.BigEndian.PutUint32(chunkKey[len(chunkKey)-4:], uint32(to))
 	c := tx.Cursor(bucket)
 	defer c.Close()
 	cForDelete := tx.Cursor(bucket) // use dedicated cursor for delete operation, but in near future will change to ETL
@@ -78,9 +78,9 @@ func TruncateRange(tx ethdb.Tx, bucket string, key []byte, from, to uint64) erro
 		if err != nil {
 			return err
 		}
-		noReasonToCheckNextChunk := (uint64(bm.Minimum()) <= from && uint64(bm.Maximum()) >= to) || binary.BigEndian.Uint32(k[len(k)-4:]) == ^uint32(0)
+		noReasonToCheckNextChunk := uint64(bm.Minimum()) <= to || binary.BigEndian.Uint32(k[len(k)-4:]) == ^uint32(0)
 
-		bm.RemoveRange(from, to)
+		bm.RemoveRange(to, uint64(bm.Maximum())+1)
 		if bm.GetCardinality() == 0 { // don't store empty bitmaps
 			err = cForDelete.Delete(k, nil)
 			if err != nil {
