@@ -257,10 +257,10 @@ func unwindLogIndex(logPrefix string, db ethdb.DbWithPendingMutations, from, to 
 		return err
 	}
 
-	if err := truncateBitmaps(db.(ethdb.HasTx).Tx(), dbutils.LogTopicIndex, topics, to+1, from+1); err != nil {
+	if err := truncateBitmaps(db.(ethdb.HasTx).Tx(), dbutils.LogTopicIndex, topics, to+1); err != nil {
 		return err
 	}
-	if err := truncateBitmaps(db.(ethdb.HasTx).Tx(), dbutils.LogAddressIndex, addrs, to+1, from+1); err != nil {
+	if err := truncateBitmaps(db.(ethdb.HasTx).Tx(), dbutils.LogAddressIndex, addrs, to+1); err != nil {
 		return err
 	}
 	return nil
@@ -292,14 +292,14 @@ func flushBitmaps(c *etl.Collector, inMem map[string]*roaring.Bitmap) error {
 	return nil
 }
 
-func truncateBitmaps(tx ethdb.Tx, bucket string, inMem map[string]struct{}, from, to uint64) error {
+func truncateBitmaps(tx ethdb.Tx, bucket string, inMem map[string]struct{}, to uint64) error {
 	keys := make([]string, 0, len(inMem))
 	for k := range inMem {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		if err := bitmapdb.TruncateRange(tx, bucket, []byte(k), from, to); err != nil {
+		if err := bitmapdb.TruncateRange(tx, bucket, []byte(k), to); err != nil {
 			return fmt.Errorf("fail TruncateRange: bucket=%s, %w", bucket, err)
 		}
 	}

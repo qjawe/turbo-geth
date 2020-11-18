@@ -249,7 +249,7 @@ func UnwindAccountHistoryIndex(u *UnwindState, s *StageState, db ethdb.Database,
 	}
 
 	logPrefix := s.state.LogPrefix()
-	if err := unwindHistory(logPrefix, tx, s.BlockNumber, u.UnwindPoint, dbutils.PlainAccountChangeSetBucket, quitCh); err != nil {
+	if err := unwindHistory(logPrefix, tx, dbutils.PlainAccountChangeSetBucket, u.UnwindPoint+1, quitCh); err != nil {
 		return fmt.Errorf("[%s] %w", logPrefix, err)
 	}
 
@@ -281,7 +281,7 @@ func UnwindStorageHistoryIndex(u *UnwindState, s *StageState, db ethdb.Database,
 	}
 
 	logPrefix := s.state.LogPrefix()
-	if err := unwindHistory(logPrefix, tx, s.BlockNumber, u.UnwindPoint, dbutils.PlainStorageChangeSetBucket, quitCh); err != nil {
+	if err := unwindHistory(logPrefix, tx, dbutils.PlainStorageChangeSetBucket, u.UnwindPoint+1, quitCh); err != nil {
 		return fmt.Errorf("[%s] %w", logPrefix, err)
 	}
 
@@ -297,9 +297,9 @@ func UnwindStorageHistoryIndex(u *UnwindState, s *StageState, db ethdb.Database,
 	return nil
 }
 
-func unwindHistory(logPrefix string, db ethdb.Database, from, to uint64, csBucket string, quitCh <-chan struct{}) error {
+func unwindHistory(logPrefix string, db ethdb.Database, csBucket string, to uint64, quitCh <-chan struct{}) error {
 	updates := map[string]struct{}{}
-	if err := changeset.Walk(db, csBucket, dbutils.EncodeBlockNumber(from), 0, func(blockN uint64, k, v []byte) (bool, error) {
+	if err := changeset.Walk(db, csBucket, dbutils.EncodeBlockNumber(to), 0, func(blockN uint64, k, v []byte) (bool, error) {
 		if blockN >= to {
 			return false, nil
 		}
@@ -313,7 +313,7 @@ func unwindHistory(logPrefix string, db ethdb.Database, from, to uint64, csBucke
 		return err
 	}
 
-	if err := truncateBitmaps(db.(ethdb.HasTx).Tx(), changeset.Mapper[csBucket].IndexBucket, updates, to+1, from+1); err != nil {
+	if err := truncateBitmaps(db.(ethdb.HasTx).Tx(), changeset.Mapper[csBucket].IndexBucket, updates, to); err != nil {
 		return err
 	}
 	return nil
