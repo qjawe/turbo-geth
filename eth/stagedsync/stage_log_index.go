@@ -193,13 +193,13 @@ func promoteLogIndex(logPrefix string, db ethdb.Database, start uint64, tmpdir s
 			if currentBitmap.GetCardinality() == 0 {
 				binary.BigEndian.PutUint32(chunkKey[len(k):], ^uint32(0))
 
-				if err := next(k, chunkKey, common.CopyBytes(buf.Bytes())); err != nil {
+				if err := next(k, chunkKey, buf.Bytes()); err != nil {
 					return err
 				}
 				break
 			}
 			binary.BigEndian.PutUint32(chunkKey[len(k):], chunk.Maximum())
-			if err := next(k, chunkKey, common.CopyBytes(buf.Bytes())); err != nil {
+			if err := next(k, chunkKey, buf.Bytes()); err != nil {
 				return err
 			}
 		}
