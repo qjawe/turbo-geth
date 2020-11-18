@@ -151,14 +151,14 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 			runtime.ReadMemStats(&m)
 			log.Info(fmt.Sprintf("[%s] Progress", logPrefix), "number", blockN, "alloc", common.StorageSize(m.Alloc), "sys", common.StorageSize(m.Sys))
 		case <-checkFlushEvery.C:
-			if needFlush(updates, logIndicesMemLimit) {
+			if needFlush(updates, bitmapsBufLimit) {
 				if err := flushBitmaps(collectorUpdates, updates); err != nil {
 					return false, err
 				}
 				updates = map[string]*roaring.Bitmap{}
 			}
 
-			if needFlush(creates, logIndicesMemLimit) {
+			if needFlush(creates, bitmapsBufLimit) {
 				if err := flushBitmaps(collectorCreates, creates); err != nil {
 					return false, err
 				}
