@@ -159,8 +159,9 @@ func promoteLogIndex(logPrefix string, db ethdb.Database, start uint64, tmpdir s
 	var currentBitmap = roaring.New()
 	var buf = bytes.NewBuffer(nil)
 
+	lastChunkKey := make([]byte, 128)
 	var loaderFunc = func(k []byte, v []byte, table etl.CurrentTableReader, next etl.LoadNextFunc) error {
-		lastChunkKey := make([]byte, len(k)+4)
+		lastChunkKey = lastChunkKey[:len(k)+4]
 		copy(lastChunkKey, k)
 		binary.BigEndian.PutUint32(lastChunkKey[len(k):], ^uint32(0))
 		lastChunkBytes, err := table.Get(lastChunkKey)

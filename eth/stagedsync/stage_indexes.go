@@ -166,7 +166,7 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 			}
 		}
 
-		kStr := string(common.CopyBytes(k))
+		kStr := string(k)
 		if len(v) == 0 {
 			m, ok := creates[kStr]
 			if !ok {
@@ -197,20 +197,21 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 	var currentBitmap = roaring.New()
 	var buf = bytes.NewBuffer(nil)
 
+	lastChunkKey := make([]byte, 128)
 	var loaderFunc = func(k []byte, v []byte, table etl.CurrentTableReader, next etl.LoadNextFunc) error {
-		lastChunkKey := make([]byte, len(k)+4)
+		lastChunkKey = lastChunkKey[:len(k)+4]
 		copy(lastChunkKey, k)
 		binary.BigEndian.PutUint32(lastChunkKey[len(k):], ^uint32(0))
 		lastChunkBytes, err := table.Get(lastChunkKey)
 		if err != nil && !errors.Is(err, ethdb.ErrKeyNotFound) {
-			return fmt.Errorf("%s: find last chunk failed: %w", logPrefix, err)
+			return fmt.Errorf("find last chunk failed: %w", err)
 		}
 
 		lastChunk := roaring.New()
 		if len(lastChunkBytes) > 0 {
 			_, err = lastChunk.FromBuffer(lastChunkBytes)
 			if err != nil {
-				return fmt.Errorf("%s: couldn't read last log index chunk: %w, len(lastChunkBytes)=%d", logPrefix, err, len(lastChunkBytes))
+				return fmt.Errorf("couldn't read last log index chunk: %w, len(lastChunkBytes)=%d", err, len(lastChunkBytes))
 			}
 		}
 
