@@ -15,7 +15,6 @@ import (
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
-	"github.com/ledgerwatch/turbo-geth/ethdb/bitmapdb"
 	"github.com/ledgerwatch/turbo-geth/log"
 )
 
@@ -219,28 +218,9 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 			return err
 		}
 		currentBitmap.Or(lastChunk) // merge last existing chunk from db - next loop will overwrite it
-		nextChunk := bitmapdb.ChunkIterator(currentBitmap, bitmapdb.ChunkLimit)
-		for chunk := nextChunk(); chunk != nil; chunk = nextChunk() {
-			buf.Reset()
-			chunk.RunOptimize()
-			if _, err := chunk.WriteTo(buf); err != nil {
-				return err
-			}
-			chunkKey := make([]byte, len(k)+4)
-			copy(chunkKey, k)
-			if currentBitmap.GetCardinality() == 0 {
-				binary.BigEndian.PutUint32(chunkKey[len(k):], ^uint32(0))
-				if err := next(k, chunkKey, buf.Bytes()); err != nil {
-					return err
-				}
-				break
-			}
-			binary.BigEndian.PutUint32(chunkKey[len(k):], chunk.Maximum())
-			if err := next(k, chunkKey, buf.Bytes()); err != nil {
-				return err
-			}
+		if err = sendBitmapsByChunks(k, currentBitmap, buf, next); err != nil {
+			return err
 		}
-
 		currentBitmap.Clear()
 		return nil
 	}

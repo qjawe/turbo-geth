@@ -10,8 +10,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/ledgerwatch/turbo-geth/ethdb/cbor"
-
 	"github.com/RoaringBitmap/roaring"
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/turbo-geth/common"
@@ -20,6 +18,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/core/types"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
 	"github.com/ledgerwatch/turbo-geth/ethdb/bitmapdb"
+	"github.com/ledgerwatch/turbo-geth/ethdb/cbor"
 	"github.com/ledgerwatch/turbo-geth/log"
 )
 
@@ -181,29 +180,9 @@ func promoteLogIndex(logPrefix string, db ethdb.Database, start uint64, tmpdir s
 			return err
 		}
 		currentBitmap.Or(lastChunk) // merge last existing chunk from db - next loop will overwrite it
-		nextChunk := bitmapdb.ChunkIterator(currentBitmap, bitmapdb.ChunkLimit)
-		for chunk := nextChunk(); chunk != nil; chunk = nextChunk() {
-			buf.Reset()
-			chunk.RunOptimize()
-			if _, err := chunk.WriteTo(buf); err != nil {
-				return err
-			}
-			chunkKey := make([]byte, len(k)+4)
-			copy(chunkKey, k)
-			if currentBitmap.GetCardinality() == 0 {
-				binary.BigEndian.PutUint32(chunkKey[len(k):], ^uint32(0))
-
-				if err := next(k, chunkKey, buf.Bytes()); err != nil {
-					return err
-				}
-				break
-			}
-			binary.BigEndian.PutUint32(chunkKey[len(k):], chunk.Maximum())
-			if err := next(k, chunkKey, buf.Bytes()); err != nil {
-				return err
-			}
+		if err = sendBitmapsByChunks(k, currentBitmap, buf, next); err != nil {
+			return err
 		}
-
 		currentBitmap.Clear()
 		return nil
 	}
@@ -324,5 +303,30 @@ func truncateBitmaps(tx ethdb.Tx, bucket string, inMem map[string]struct{}, from
 		}
 	}
 
+	return nil
+}
+
+func sendBitmapsByChunks(k []byte, m *roaring.Bitmap, buf *bytes.Buffer, next etl.LoadNextFunc) error {
+	nextChunk := bitmapdb.ChunkIterator(m, bitmapdb.ChunkLimit)
+	for chunk := nextChunk(); chunk != nil; chunk = nextChunk() {
+		buf.Reset()
+		chunk.RunOptimize()
+		if _, err := chunk.WriteTo(buf); err != nil {
+			return err
+		}
+		chunkKey := make([]byte, len(k)+4)
+		copy(chunkKey, k)
+		if m.GetCardinality() == 0 {
+			binary.BigEndian.PutUint32(chunkKey[len(k):], ^uint32(0))
+			if err := next(k, chunkKey, buf.Bytes()); err != nil {
+				return err
+			}
+			break
+		}
+		binary.BigEndian.PutUint32(chunkKey[len(k):], chunk.Maximum())
+		if err := next(k, chunkKey, buf.Bytes()); err != nil {
+			return err
+		}
+	}
 	return nil
 }
