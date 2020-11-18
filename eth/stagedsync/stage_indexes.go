@@ -222,6 +222,7 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 		nextChunk := bitmapdb.ChunkIterator(currentBitmap, bitmapdb.ChunkLimit)
 		for chunk := nextChunk(); chunk != nil; chunk = nextChunk() {
 			buf.Reset()
+			chunk.RunOptimize()
 			if _, err := chunk.WriteTo(buf); err != nil {
 				return err
 			}
@@ -315,10 +316,9 @@ func UnwindStorageHistoryIndex(u *UnwindState, s *StageState, db ethdb.Database,
 	return nil
 }
 
-func unwindHistory(logPrefix string, db ethdb.DbWithPendingMutations, from, to uint64, csBucket string, quitCh <-chan struct{}) error {
+func unwindHistory(logPrefix string, db ethdb.Database, from, to uint64, csBucket string, quitCh <-chan struct{}) error {
 	updates := map[string]struct{}{}
 	if err := changeset.Walk(db, csBucket, dbutils.EncodeBlockNumber(from), 0, func(blockN uint64, k, v []byte) (bool, error) {
-		k = dbutils.CompositeKeyWithoutIncarnation(k)
 		if blockN >= to {
 			return false, nil
 		}
@@ -327,7 +327,6 @@ func unwindHistory(logPrefix string, db ethdb.DbWithPendingMutations, from, to u
 		}
 		k = dbutils.CompositeKeyWithoutIncarnation(k)
 		updates[string(k)] = struct{}{}
-
 		return true, nil
 	}); err != nil {
 		return err
