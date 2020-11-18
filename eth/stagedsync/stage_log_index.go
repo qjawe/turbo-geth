@@ -184,6 +184,7 @@ func promoteLogIndex(logPrefix string, db ethdb.Database, start uint64, tmpdir s
 		nextChunk := bitmapdb.ChunkIterator(currentBitmap, bitmapdb.ChunkLimit)
 		for chunk := nextChunk(); chunk != nil; chunk = nextChunk() {
 			buf.Reset()
+			chunk.RunOptimize()
 			if _, err := chunk.WriteTo(buf); err != nil {
 				return err
 			}

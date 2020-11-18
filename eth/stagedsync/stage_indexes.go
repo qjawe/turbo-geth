@@ -14,7 +14,6 @@ import (
 	"github.com/ledgerwatch/turbo-geth/common/changeset"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
-	"github.com/ledgerwatch/turbo-geth/core"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
 	"github.com/ledgerwatch/turbo-geth/ethdb/bitmapdb"
 	"github.com/ledgerwatch/turbo-geth/log"
@@ -57,15 +56,63 @@ func SpawnAccountHistoryIndex(s *StageState, db ethdb.Database, tmpdir string, q
 	stopChangeSetsLookupAt := executionAt + 1
 
 	if err := promoteHistory(logPrefix, tx, dbutils.PlainAccountChangeSetBucket, startChangeSetsLookupAt, stopChangeSetsLookupAt, tmpdir, quitCh); err != nil {
-		return err
-	}
-
-	if err := promoteHistory(logPrefix, tx, dbutils.PlainStorageChangeSetBucket, startChangeSetsLookupAt, stopChangeSetsLookupAt, tmpdir, quitCh); err != nil {
-		return err
+		return fmt.Errorf("[%s] %w", logPrefix, err)
 	}
 
 	if err := s.DoneAndUpdate(tx, executionAt); err != nil {
-		return err
+		return fmt.Errorf("[%s] %w", logPrefix, err)
+	}
+
+	if !useExternalTx {
+		if _, err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func SpawnStorageHistoryIndex(s *StageState, db ethdb.Database, tmpdir string, quitCh <-chan struct{}) error {
+	var tx ethdb.DbWithPendingMutations
+	var useExternalTx bool
+	if hasTx, ok := db.(ethdb.HasTx); ok && hasTx.Tx() != nil {
+		tx = db.(ethdb.DbWithPendingMutations)
+		useExternalTx = true
+	} else {
+		var err error
+		tx, err = db.Begin(context.Background(), ethdb.RW)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
+	}
+
+	executionAt, err := s.ExecutionAt(tx)
+	logPrefix := s.state.LogPrefix()
+	if err != nil {
+		return fmt.Errorf("%s: logs index: getting last executed block: %w", logPrefix, err)
+	}
+	if executionAt == s.BlockNumber {
+		s.Done()
+		return nil
+	}
+
+	start := s.BlockNumber
+	if start > 0 {
+		start++
+	}
+
+	var startChangeSetsLookupAt uint64
+	if s.BlockNumber > 0 {
+		startChangeSetsLookupAt = s.BlockNumber + 1
+	}
+	stopChangeSetsLookupAt := executionAt + 1
+
+	if err := promoteHistory(logPrefix, tx, dbutils.PlainStorageChangeSetBucket, startChangeSetsLookupAt, stopChangeSetsLookupAt, tmpdir, quitCh); err != nil {
+		return fmt.Errorf("[%s] %w", logPrefix, err)
+	}
+
+	if err := s.DoneAndUpdate(tx, executionAt); err != nil {
+		return fmt.Errorf("[%s] %w", logPrefix, err)
 	}
 
 	if !useExternalTx {
@@ -89,13 +136,14 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 	collectorCreates := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
 
 	if err := changeset.Walk(db, changesetBucket, dbutils.EncodeBlockNumber(start), 0, func(blockN uint64, k, v []byte) (bool, error) {
-		k = dbutils.CompositeKeyWithoutIncarnation(k)
 		if blockN >= stop {
 			return false, nil
 		}
 		if err := common.Stopped(quit); err != nil {
 			return false, err
 		}
+
+		k = dbutils.CompositeKeyWithoutIncarnation(k)
 
 		select {
 		default:
@@ -203,50 +251,90 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 	return nil
 }
 
-func SpawnStorageHistoryIndex(s *StageState, db ethdb.Database, tmpdir string, quitCh <-chan struct{}) error {
-	endBlock, err := s.ExecutionAt(db)
-	logPrefix := s.state.LogPrefix()
-	if err != nil {
-		return fmt.Errorf("%s: getting last executed block: %w", logPrefix, err)
-	}
-	if endBlock == s.BlockNumber {
-		s.Done()
-		return nil
-	}
-	var blockNum uint64
-	lastProcessedBlockNumber := s.BlockNumber
-	if lastProcessedBlockNumber > 0 {
-		blockNum = lastProcessedBlockNumber + 1
-	}
-	ig := core.NewIndexGenerator(logPrefix, db, quitCh)
-	ig.TempDir = tmpdir
-	if err := ig.GenerateIndex(blockNum, endBlock+1, dbutils.PlainStorageChangeSetBucket, tmpdir); err != nil {
-		return fmt.Errorf("%s: fail to generate index: %w", logPrefix, err)
-	}
-
-	return s.DoneAndUpdate(db, endBlock)
-}
-
 func UnwindAccountHistoryIndex(u *UnwindState, s *StageState, db ethdb.Database, quitCh <-chan struct{}) error {
-	logPrefix := s.state.LogPrefix()
-	ig := core.NewIndexGenerator(logPrefix, db, quitCh)
-	if err := ig.Truncate(u.UnwindPoint, dbutils.PlainAccountChangeSetBucket); err != nil {
-		return fmt.Errorf("%s: fail to truncate index: %w", logPrefix, err)
+	var tx ethdb.DbWithPendingMutations
+	var useExternalTx bool
+	if hasTx, ok := db.(ethdb.HasTx); ok && hasTx.Tx() != nil {
+		tx = db.(ethdb.DbWithPendingMutations)
+		useExternalTx = true
+	} else {
+		var err error
+		tx, err = db.Begin(context.Background(), ethdb.RW)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
 	}
-	if err := u.Done(db); err != nil {
-		return fmt.Errorf("%s: %w", logPrefix, err)
+
+	logPrefix := s.state.LogPrefix()
+	if err := unwindHistory(logPrefix, tx, s.BlockNumber, u.UnwindPoint, dbutils.PlainAccountChangeSetBucket, quitCh); err != nil {
+		return fmt.Errorf("[%s] %w", logPrefix, err)
+	}
+
+	if err := u.Done(tx); err != nil {
+		return fmt.Errorf("[%s] %w", logPrefix, err)
+	}
+
+	if !useExternalTx {
+		if _, err := tx.Commit(); err != nil {
+			return err
+		}
 	}
 	return nil
 }
 
 func UnwindStorageHistoryIndex(u *UnwindState, s *StageState, db ethdb.Database, quitCh <-chan struct{}) error {
-	logPrefix := s.state.LogPrefix()
-	ig := core.NewIndexGenerator(logPrefix, db, quitCh)
-	if err := ig.Truncate(u.UnwindPoint, dbutils.PlainStorageChangeSetBucket); err != nil {
-		return fmt.Errorf("%s: fail to truncate index: %w", logPrefix, err)
+	var tx ethdb.DbWithPendingMutations
+	var useExternalTx bool
+	if hasTx, ok := db.(ethdb.HasTx); ok && hasTx.Tx() != nil {
+		tx = db.(ethdb.DbWithPendingMutations)
+		useExternalTx = true
+	} else {
+		var err error
+		tx, err = db.Begin(context.Background(), ethdb.RW)
+		if err != nil {
+			return err
+		}
+		defer tx.Rollback()
 	}
-	if err := u.Done(db); err != nil {
-		return fmt.Errorf("%s: %w", logPrefix, err)
+
+	logPrefix := s.state.LogPrefix()
+	if err := unwindHistory(logPrefix, tx, s.BlockNumber, u.UnwindPoint, dbutils.PlainStorageChangeSetBucket, quitCh); err != nil {
+		return fmt.Errorf("[%s] %w", logPrefix, err)
+	}
+
+	if err := u.Done(tx); err != nil {
+		return fmt.Errorf("[%s] %w", logPrefix, err)
+	}
+
+	if !useExternalTx {
+		if _, err := tx.Commit(); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func unwindHistory(logPrefix string, db ethdb.DbWithPendingMutations, from, to uint64, csBucket string, quitCh <-chan struct{}) error {
+	updates := map[string]struct{}{}
+	if err := changeset.Walk(db, csBucket, dbutils.EncodeBlockNumber(from), 0, func(blockN uint64, k, v []byte) (bool, error) {
+		k = dbutils.CompositeKeyWithoutIncarnation(k)
+		if blockN >= to {
+			return false, nil
+		}
+		if err := common.Stopped(quitCh); err != nil {
+			return false, err
+		}
+		k = dbutils.CompositeKeyWithoutIncarnation(k)
+		updates[string(k)] = struct{}{}
+
+		return true, nil
+	}); err != nil {
+		return err
+	}
+
+	if err := truncateBitmaps(db.(ethdb.HasTx).Tx(), changeset.Mapper[csBucket].IndexBucket, updates, to+1, from+1); err != nil {
+		return err
 	}
 	return nil
 }
