@@ -23,7 +23,7 @@ import (
 )
 
 const (
-	logIndicesMemLimit       = 256 * datasize.MB
+	bitmapsBufLimit          = 256 * datasize.MB // limit how much memory can use bitmaps before flushing to DB
 	logIndicesCheckSizeEvery = 30 * time.Second
 )
 
@@ -107,14 +107,14 @@ func promoteLogIndex(logPrefix string, db ethdb.Database, start uint64, tmpdir s
 			runtime.ReadMemStats(&m)
 			log.Info(fmt.Sprintf("[%s] Progress", logPrefix), "number", blockNum, "alloc", common.StorageSize(m.Alloc), "sys", common.StorageSize(m.Sys))
 		case <-checkFlushEvery.C:
-			if needFlush(topics, logIndicesMemLimit) {
+			if needFlush(topics, bitmapsBufLimit) {
 				if err := flushBitmaps(collectorTopics, topics); err != nil {
 					return err
 				}
 				topics = map[string]*roaring.Bitmap{}
 			}
 
-			if needFlush(addresses, logIndicesMemLimit) {
+			if needFlush(addresses, bitmapsBufLimit) {
 				if err := flushBitmaps(collectorAddrs, addresses); err != nil {
 					return err
 				}
