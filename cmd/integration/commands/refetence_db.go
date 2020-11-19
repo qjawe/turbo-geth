@@ -303,7 +303,7 @@ func toMdbx(ctx context.Context, from, to string) error {
 	defer srcTx.Rollback()
 
 	wg := sync.WaitGroup{}
-	ch := make(chan Row, 10_000_000)
+	ch := make(chan *Row, 10_000_000)
 	wg.Add(1)
 	go func() {
 		defer wg.Done()
@@ -318,12 +318,12 @@ func toMdbx(ctx context.Context, from, to string) error {
 		}
 
 		srcC := srcTx.Cursor(name)
-		ch <- Row{bucket: name}
+		ch <- &Row{bucket: name}
 		for k, v, err := srcC.First(); k != nil; k, v, err = srcC.Next() {
 			if err != nil {
 				return err
 			}
-			ch <- Row{k: k, v: v}
+			ch <- &Row{k: k, v: v}
 		}
 	}
 	close(ch)
@@ -339,7 +339,7 @@ type Row struct {
 	v      []byte
 }
 
-func wr(kv ethdb.KV, ch chan Row, ctx context.Context) error {
+func wr(kv ethdb.KV, ch chan *Row, ctx context.Context) error {
 	commitEvery := time.NewTicker(10 * time.Second)
 	defer commitEvery.Stop()
 
