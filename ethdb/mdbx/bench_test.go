@@ -1599,6 +1599,7 @@ func populateBenchmarkDB(env *Env, dbi DBI, rc *randSourceCursor) ([][]byte, err
 	return ps, nil
 }
 
+//nolint:unparam
 func benchmarkScanDBI(cur *Cursor, dbi DBI, n int) error {
 	for i := 0; n < 0 || i < n; i++ {
 		_, _, err := cur.Get(nil, nil, Next)
@@ -1630,11 +1631,10 @@ func bMust(b *testing.B, err error, action string) {
 	}
 }
 
-const randSourceSize = 10 << 20  // size of the 'entropy pool' for random byte generation.
-const benchDBMapSize = 100 << 20 // size of a benchmark db memory map
-const benchDBNumKeys = 1 << 12   // number of keys to store in benchmark databases
-const benchDBMaxKeyLen = 30      // maximum length for database keys (size is limited by MDB)
-const benchDBMaxValLen = 1024    // maximum lengh for database values
+const randSourceSize = 10 << 20 // size of the 'entropy pool' for random byte generation.
+const benchDBNumKeys = 1 << 12  // number of keys to store in benchmark databases
+const benchDBMaxKeyLen = 30     // maximum length for database keys (size is limited by MDB)
+const benchDBMaxValLen = 1024   // maximum lengh for database values
 
 func makeBenchDBKey(c *randSourceCursor) []byte {
 	return c.NBytes(rand.Intn(benchDBMaxKeyLen) + 1)
@@ -1725,6 +1725,7 @@ func writeTestRecord(cur *Cursor, r testRecord) error {
 	return cur.Put(r.Key(), r.Data(), 0)
 }
 
+//nolint:unparam
 func testRecordSetSized(numBytes int64) testRecordSet {
 	const recordSize = 16
 	numRecord := numBytes / recordSize
