@@ -8,6 +8,7 @@ import (
 	"sort"
 	"strconv"
 	"testing"
+	"time"
 
 	"github.com/ledgerwatch/turbo-geth/common/changeset"
 	"github.com/ledgerwatch/turbo-geth/common/math"
@@ -33,7 +34,11 @@ func TestIndexGenerator_GenerateIndex_SimpleCase(t *testing.T) {
 				t.Fatal("incorrect cs bucket")
 			}
 			addrs, expecedIndexes := generateTestData(t, db, csBucket, blocksNum)
-			err := promoteHistory("logPrefix", db, csBucket, 0, uint64(blocksNum), getTmpDir(), nil)
+			err := promoteHistory("logPrefix", db, csBucket, 0, uint64(blocksNum/2), 10, time.Millisecond, getTmpDir(), nil)
+			if err != nil {
+				t.Fatal(err)
+			}
+			err = promoteHistory("logPrefix", db, csBucket, uint64(blocksNum/2), uint64(blocksNum), 10, time.Millisecond, getTmpDir(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
@@ -58,7 +63,7 @@ func TestIndexGenerator_Truncate(t *testing.T) {
 		hashes, expected := generateTestData(t, db, csbucket, 2100)
 		mp := changeset.Mapper[csbucket]
 		indexBucket := mp.IndexBucket
-		err := promoteHistory("logPrefix", db, csbucket, 0, uint64(2100), getTmpDir(), nil)
+		err := promoteHistory("logPrefix", db, csbucket, 0, uint64(2100), 10, time.Millisecond, getTmpDir(), nil)
 		if err != nil {
 			t.Fatal(err)
 		}

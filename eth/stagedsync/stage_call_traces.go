@@ -27,11 +27,6 @@ import (
 	"github.com/ledgerwatch/turbo-geth/params"
 )
 
-const (
-	callIndicesMemLimit       = 256 * datasize.MB
-	callIndicesCheckSizeEvery = 30 * time.Second
-)
-
 type StateAccessBuilder func(db ethdb.Database, blockNumber uint64,
 	accountCache, storageCache, codeCache, codeSizeCache *fastcache.Cache) (state.StateReader, state.WriterWithChangeSets)
 
@@ -69,7 +64,7 @@ func SpawnCallTraces(s *StageState, db ethdb.Database, chainConfig *params.Chain
 		return nil
 	}
 
-	if err := promoteCallTraces(logPrefix, tx, s.BlockNumber+1, endBlock, chainConfig, chainContext, tmpdir, quit, params); err != nil {
+	if err := promoteCallTraces(logPrefix, tx, s.BlockNumber+1, endBlock, chainConfig, chainContext, bitmapsBufLimit, bitmapsFlushEvery, tmpdir, quit, params); err != nil {
 		return err
 	}
 
@@ -85,7 +80,7 @@ func SpawnCallTraces(s *StageState, db ethdb.Database, chainConfig *params.Chain
 	return nil
 }
 
-func promoteCallTraces(logPrefix string, tx ethdb.Database, startBlock, endBlock uint64, chainConfig *params.ChainConfig, chainContext core.ChainContext, tmpdir string, quit <-chan struct{}, params CallTracesStageParams) error {
+func promoteCallTraces(logPrefix string, tx ethdb.Database, startBlock, endBlock uint64, chainConfig *params.ChainConfig, chainContext core.ChainContext, bufLimit datasize.ByteSize, flushEvery time.Duration, tmpdir string, quit <-chan struct{}, params CallTracesStageParams) error {
 	logEvery := time.NewTicker(logInterval)
 	defer logEvery.Stop()
 
@@ -94,7 +89,7 @@ func promoteCallTraces(logPrefix string, tx ethdb.Database, startBlock, endBlock
 	collectorFrom := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
 	collectorTo := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
 
-	checkFlushEvery := time.NewTicker(callIndicesCheckSizeEvery)
+	checkFlushEvery := time.NewTicker(flushEvery)
 	defer checkFlushEvery.Stop()
 	engine := chainContext.Engine()
 
@@ -140,7 +135,7 @@ func promoteCallTraces(logPrefix string, tx ethdb.Database, startBlock, endBlock
 				"sys", common.StorageSize(m.Sys),
 				"numGC", int(m.NumGC))
 		case <-checkFlushEvery.C:
-			if needFlush(froms, callIndicesMemLimit) {
+			if needFlush(froms, bufLimit) {
 				if err := flushBitmaps(collectorFrom, froms); err != nil {
 					return fmt.Errorf("[%s] %w", logPrefix, err)
 				}
@@ -148,7 +143,7 @@ func promoteCallTraces(logPrefix string, tx ethdb.Database, startBlock, endBlock
 				froms = map[string]*roaring.Bitmap{}
 			}
 
-			if needFlush(tos, callIndicesMemLimit) {
+			if needFlush(tos, bufLimit) {
 				if err := flushBitmaps(collectorTo, tos); err != nil {
 					return fmt.Errorf("[%s] %w", logPrefix, err)
 				}

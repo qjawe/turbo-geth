@@ -79,7 +79,6 @@ func TruncateRange(tx ethdb.Tx, bucket string, key []byte, to uint64) error {
 			return err
 		}
 		noReasonToCheckNextChunk := uint64(bm.Minimum()) <= to || binary.BigEndian.Uint32(k[len(k)-4:]) == ^uint32(0)
-
 		bm.RemoveRange(to, uint64(bm.Maximum())+1)
 		if bm.GetCardinality() == 0 { // don't store empty bitmaps
 			err = cForDelete.Delete(k, nil)

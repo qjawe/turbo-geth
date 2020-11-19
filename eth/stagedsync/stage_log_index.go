@@ -23,8 +23,8 @@ import (
 )
 
 const (
-	bitmapsBufLimit          = 256 * datasize.MB // limit how much memory can use bitmaps before flushing to DB
-	logIndicesCheckSizeEvery = 30 * time.Second
+	bitmapsBufLimit   = 256 * datasize.MB // limit how much memory can use bitmaps before flushing to DB
+	bitmapsFlushEvery = 30 * time.Second
 )
 
 func SpawnLogIndex(s *StageState, db ethdb.Database, tmpdir string, quit <-chan struct{}) error {
@@ -57,7 +57,7 @@ func SpawnLogIndex(s *StageState, db ethdb.Database, tmpdir string, quit <-chan 
 		start++
 	}
 
-	if err := promoteLogIndex(logPrefix, tx, start, tmpdir, quit); err != nil {
+	if err := promoteLogIndex(logPrefix, tx, start, bitmapsBufLimit, bitmapsFlushEvery, tmpdir, quit); err != nil {
 		return err
 	}
 
@@ -73,7 +73,7 @@ func SpawnLogIndex(s *StageState, db ethdb.Database, tmpdir string, quit <-chan 
 	return nil
 }
 
-func promoteLogIndex(logPrefix string, db ethdb.Database, start uint64, tmpdir string, quit <-chan struct{}) error {
+func promoteLogIndex(logPrefix string, db ethdb.Database, start uint64, bufLimit datasize.ByteSize, flushEvery time.Duration, tmpdir string, quit <-chan struct{}) error {
 	logEvery := time.NewTicker(30 * time.Second)
 	defer logEvery.Stop()
 
@@ -82,7 +82,7 @@ func promoteLogIndex(logPrefix string, db ethdb.Database, start uint64, tmpdir s
 	addresses := map[string]*roaring.Bitmap{}
 	logs := tx.Cursor(dbutils.Log)
 	defer logs.Close()
-	checkFlushEvery := time.NewTicker(logIndicesCheckSizeEvery)
+	checkFlushEvery := time.NewTicker(flushEvery)
 	defer checkFlushEvery.Stop()
 
 	collectorTopics := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
@@ -107,14 +107,14 @@ func promoteLogIndex(logPrefix string, db ethdb.Database, start uint64, tmpdir s
 			runtime.ReadMemStats(&m)
 			log.Info(fmt.Sprintf("[%s] Progress", logPrefix), "number", blockNum, "alloc", common.StorageSize(m.Alloc), "sys", common.StorageSize(m.Sys))
 		case <-checkFlushEvery.C:
-			if needFlush(topics, bitmapsBufLimit) {
+			if needFlush(topics, bufLimit) {
 				if err := flushBitmaps(collectorTopics, topics); err != nil {
 					return err
 				}
 				topics = map[string]*roaring.Bitmap{}
 			}
 
-			if needFlush(addresses, bitmapsBufLimit) {
+			if needFlush(addresses, bufLimit) {
 				if err := flushBitmaps(collectorAddrs, addresses); err != nil {
 					return err
 				}

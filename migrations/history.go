@@ -12,7 +12,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/log"
 )
 
-var historyDup = Migration{
+var historyBitmap = Migration{
 	Name: "history_bitmap_1",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
 		logEvery := time.NewTicker(30 * time.Second)
