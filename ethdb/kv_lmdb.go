@@ -141,7 +141,7 @@ func (opts LmdbOpts) Open() (kv KV, err error) {
 		}
 	}
 
-	var flags uint = 0 // lmdb.NoReadahead
+	var flags uint = lmdb.NoReadahead
 	if opts.readOnly {
 		flags |= lmdb.Readonly
 	}
