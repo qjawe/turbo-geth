@@ -1,6 +1,7 @@
 package stagedsync
 
 import (
+	"context"
 	"encoding/binary"
 	"fmt"
 	"os"
@@ -28,24 +29,29 @@ func TestIndexGenerator_GenerateIndex_SimpleCase(t *testing.T) {
 		return func(t *testing.T) {
 			db := ethdb.NewMemDatabase()
 			defer db.Close()
+			tx, err := db.Begin(context.Background(), ethdb.RW)
+			if err != nil {
+				t.Fatal(err)
+			}
+			defer tx.Rollback()
 
 			csInfo, ok := changeset.Mapper[csBucket]
 			if !ok {
 				t.Fatal("incorrect cs bucket")
 			}
-			addrs, expecedIndexes := generateTestData(t, db, csBucket, blocksNum)
-			err := promoteHistory("logPrefix", db, csBucket, 0, uint64(blocksNum/2), 10, time.Millisecond, getTmpDir(), nil)
+			addrs, expecedIndexes := generateTestData(t, tx, csBucket, blocksNum)
+			err = promoteHistory("logPrefix", tx, csBucket, 0, uint64(blocksNum/2), 10, time.Millisecond, getTmpDir(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			err = promoteHistory("logPrefix", db, csBucket, uint64(blocksNum/2), uint64(blocksNum), 10, time.Millisecond, getTmpDir(), nil)
+			err = promoteHistory("logPrefix", tx, csBucket, uint64(blocksNum/2), uint64(blocksNum), 10, time.Millisecond, getTmpDir(), nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			checkIndex(t, db, csInfo.IndexBucket, addrs[0], expecedIndexes[string(addrs[0])])
-			checkIndex(t, db, csInfo.IndexBucket, addrs[1], expecedIndexes[string(addrs[1])])
-			checkIndex(t, db, csInfo.IndexBucket, addrs[2], expecedIndexes[string(addrs[2])])
+			checkIndex(t, tx, csInfo.IndexBucket, addrs[0], expecedIndexes[string(addrs[0])])
+			checkIndex(t, tx, csInfo.IndexBucket, addrs[1], expecedIndexes[string(addrs[1])])
+			checkIndex(t, tx, csInfo.IndexBucket, addrs[2], expecedIndexes[string(addrs[2])])
 		}
 	}
 
@@ -60,10 +66,17 @@ func TestIndexGenerator_Truncate(t *testing.T) {
 	for i := range buckets {
 		csbucket := buckets[i]
 		db := ethdb.NewMemDatabase()
-		hashes, expected := generateTestData(t, db, csbucket, 2100)
+		defer db.Close()
+		tx, err := db.Begin(context.Background(), ethdb.RW)
+		if err != nil {
+			t.Fatal(err)
+		}
+		defer tx.Rollback()
+
+		hashes, expected := generateTestData(t, tx, csbucket, 2100)
 		mp := changeset.Mapper[csbucket]
 		indexBucket := mp.IndexBucket
-		err := promoteHistory("logPrefix", db, csbucket, 0, uint64(2100), 10, time.Millisecond, getTmpDir(), nil)
+		err = promoteHistory("logPrefix", tx, csbucket, 0, uint64(2100), 10, time.Millisecond, getTmpDir(), nil)
 		if err != nil {
 			t.Fatal(err)
 		}
@@ -80,70 +93,88 @@ func TestIndexGenerator_Truncate(t *testing.T) {
 			expected[string(hashes[1])] = reduceSlice(expected[string(hashes[1])], 2050)
 			expected[string(hashes[2])] = reduceSlice(expected[string(hashes[2])], 2050)
 
-			err := unwindHistory("logPrefix", db, csbucket, 2100, nil)
+			err := unwindHistory("logPrefix", tx, csbucket, 2050, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			checkIndex(t, db, indexBucket, hashes[0], expected[string(hashes[0])])
-			checkIndex(t, db, indexBucket, hashes[1], expected[string(hashes[1])])
-			checkIndex(t, db, indexBucket, hashes[2], expected[string(hashes[2])])
+			checkIndex(t, tx, indexBucket, hashes[0], expected[string(hashes[0])])
+			checkIndex(t, tx, indexBucket, hashes[1], expected[string(hashes[1])])
+			checkIndex(t, tx, indexBucket, hashes[2], expected[string(hashes[2])])
 		})
 
-		t.Run("truncate to 2000 "+string(csbucket), func(t *testing.T) {
+		t.Run("truncate to 2000 "+csbucket, func(t *testing.T) {
 			expected[string(hashes[0])] = reduceSlice(expected[string(hashes[0])], 2000)
 			expected[string(hashes[1])] = reduceSlice(expected[string(hashes[1])], 2000)
 			expected[string(hashes[2])] = reduceSlice(expected[string(hashes[2])], 2000)
 
-			err := unwindHistory("logPrefix", db, csbucket, 2000, nil)
+			err := unwindHistory("logPrefix", tx, csbucket, 2000, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
 
-			checkIndex(t, db, indexBucket, hashes[0], expected[string(hashes[0])])
-			checkIndex(t, db, indexBucket, hashes[1], expected[string(hashes[1])])
-			//checkIndex(t, db, indexBucket, hashes[2], expected[string(hashes[2])][0][len(expected[string(hashes[2])][0])-1], expected[string(hashes[2])][0])
+			checkIndex(t, tx, indexBucket, hashes[0], expected[string(hashes[0])])
+			checkIndex(t, tx, indexBucket, hashes[1], expected[string(hashes[1])])
+			checkIndex(t, tx, indexBucket, hashes[2], expected[string(hashes[2])])
 		})
 
-		t.Run("truncate to 1999 "+string(csbucket), func(t *testing.T) {
-			err := unwindHistory("logPrefix", db, csbucket, 1999, nil)
+		t.Run("truncate to 1999 "+csbucket, func(t *testing.T) {
+			err := unwindHistory("logPrefix", tx, csbucket, 1999, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
+			expected[string(hashes[0])] = reduceSlice(expected[string(hashes[0])], 1999)
+			expected[string(hashes[1])] = reduceSlice(expected[string(hashes[1])], 1999)
+			expected[string(hashes[2])] = reduceSlice(expected[string(hashes[2])], 1999)
 
-			checkIndex(t, db, indexBucket, hashes[0], expected[string(hashes[0])])
-			checkIndex(t, db, indexBucket, hashes[1], expected[string(hashes[1])])
-			checkIndex(t, db, indexBucket, hashes[2], expected[string(hashes[2])])
-			_, err = db.GetIndexChunk(csbucket, hashes[0], 2000)
-			if err != ethdb.ErrKeyNotFound {
-				t.Fatal()
+			checkIndex(t, tx, indexBucket, hashes[0], expected[string(hashes[0])])
+			checkIndex(t, tx, indexBucket, hashes[1], expected[string(hashes[1])])
+			checkIndex(t, tx, indexBucket, hashes[2], expected[string(hashes[2])])
+			bm, err := bitmapdb.Get(tx, indexBucket, hashes[0], 1999, math.MaxUint32)
+			if err != nil {
+				t.Fatal(err)
 			}
-			_, err = db.GetIndexChunk(csbucket, hashes[1], 2000)
-			if err != ethdb.ErrKeyNotFound {
+			if bm.GetCardinality() > 0 && bm.Maximum() > 1999 {
+				t.Fatal(bm.Maximum())
+			}
+			bm, err = bitmapdb.Get(tx, indexBucket, hashes[1], 1999, math.MaxUint32)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bm.GetCardinality() > 0 && bm.Maximum() > 1999 {
 				t.Fatal()
 			}
 		})
 
-		t.Run("truncate to 999 "+string(csbucket), func(t *testing.T) {
+		t.Run("truncate to 999 "+csbucket, func(t *testing.T) {
+			expected[string(hashes[0])] = reduceSlice(expected[string(hashes[0])], 999)
 			expected[string(hashes[1])] = reduceSlice(expected[string(hashes[1])], 999)
 			expected[string(hashes[2])] = reduceSlice(expected[string(hashes[2])], 999)
 
-			err := unwindHistory("logPrefix", db, csbucket, 999, nil)
+			err := unwindHistory("logPrefix", tx, csbucket, 999, nil)
 			if err != nil {
 				t.Fatal(err)
 			}
-			checkIndex(t, db, indexBucket, hashes[0], expected[string(hashes[0])])
-			checkIndex(t, db, indexBucket, hashes[1], expected[string(hashes[1])])
-			checkIndex(t, db, indexBucket, hashes[2], expected[string(hashes[2])])
-			_, err = db.GetIndexChunk(csbucket, hashes[0], 1000)
-			if err != ethdb.ErrKeyNotFound {
+			bm, err := bitmapdb.Get(tx, indexBucket, hashes[0], 999, math.MaxUint32)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bm.GetCardinality() > 0 && bm.Maximum() > 999 {
 				t.Fatal()
 			}
-			_, err = db.GetIndexChunk(csbucket, hashes[1], 1000)
-			if err != ethdb.ErrKeyNotFound {
+			bm, err = bitmapdb.Get(tx, indexBucket, hashes[1], 999, math.MaxUint32)
+			if err != nil {
+				t.Fatal(err)
+			}
+			if bm.GetCardinality() > 0 && bm.Maximum() > 999 {
 				t.Fatal()
 			}
+
+			checkIndex(t, tx, indexBucket, hashes[0], expected[string(hashes[0])])
+			checkIndex(t, tx, indexBucket, hashes[1], expected[string(hashes[1])])
+			checkIndex(t, tx, indexBucket, hashes[2], expected[string(hashes[2])])
 		})
+		tx.Rollback()
 		db.Close()
 	}
 }
@@ -175,12 +206,6 @@ func generateTestData(t *testing.T, db ethdb.Database, csBucket string, numOfBlo
 		}
 	}
 
-	expected1 := make([]dbutils.HistoryIndexBytes, 0)
-	expected1 = append(expected1, dbutils.NewHistoryIndex())
-	expected2 := make([]dbutils.HistoryIndexBytes, 0)
-	expected2 = append(expected2, dbutils.NewHistoryIndex())
-	expected3 := make([]dbutils.HistoryIndexBytes, 0)
-	expected3 = append(expected3, dbutils.NewHistoryIndex())
 	res := make([]uint64, 0)
 	res2 := make([]uint64, 0)
 	res3 := make([]uint64, 0)
@@ -193,8 +218,6 @@ func generateTestData(t *testing.T, db ethdb.Database, csBucket string, numOfBlo
 		}
 
 		res = append(res, uint64(i))
-
-		expected1[len(expected1)-1] = expected1[len(expected1)-1].Append(uint64(i), false)
 
 		if i%2 == 0 {
 			err = cs.Add(addrs[1], []byte(strconv.Itoa(i)))
@@ -225,7 +248,7 @@ func generateTestData(t *testing.T, db ethdb.Database, csBucket string, numOfBlo
 	}
 }
 
-func checkIndex(t *testing.T, db ethdb.Database, bucket string, k []byte, expected []uint64) {
+func checkIndex(t *testing.T, db ethdb.Getter, bucket string, k []byte, expected []uint64) {
 	t.Helper()
 	k = dbutils.CompositeKeyWithoutIncarnation(k)
 	m, err := bitmapdb.Get(db, bucket, k, 0, math.MaxUint32)

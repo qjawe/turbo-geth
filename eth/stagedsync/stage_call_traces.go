@@ -23,6 +23,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/core/vm"
 	"github.com/ledgerwatch/turbo-geth/core/vm/stack"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
+	"github.com/ledgerwatch/turbo-geth/ethdb/bitmapdb"
 	"github.com/ledgerwatch/turbo-geth/log"
 	"github.com/ledgerwatch/turbo-geth/params"
 )
@@ -263,7 +264,13 @@ func promoteCallTraces(logPrefix string, tx ethdb.Database, startBlock, endBlock
 			return err
 		}
 		currentBitmap.Or(lastChunk) // merge last existing chunk from db - next loop will overwrite it
-		if err = sendBitmapsByChunks(k, currentBitmap, buf, next); err != nil {
+		if err := bitmapdb.WalkChunkWithKeys(k, currentBitmap, bitmapdb.ChunkLimit, func(chunkKey []byte, chunk *roaring.Bitmap) error {
+			buf.Reset()
+			if _, err := chunk.WriteTo(buf); err != nil {
+				return err
+			}
+			return next(k, chunkKey, buf.Bytes())
+		}); err != nil {
 			return err
 		}
 		currentBitmap.Clear()
@@ -296,7 +303,7 @@ func UnwindCallTraces(u *UnwindState, s *StageState, db ethdb.Database, chainCon
 	}
 
 	logPrefix := s.state.LogPrefix()
-	if err := unwindCallTraces(logPrefix, tx, s.BlockNumber, u.UnwindPoint+1, chainConfig, chainContext, quitCh); err != nil {
+	if err := unwindCallTraces(logPrefix, tx, s.BlockNumber, u.UnwindPoint, chainConfig, chainContext, quitCh); err != nil {
 		return fmt.Errorf("[%s] %w", logPrefix, err)
 	}
 
@@ -356,10 +363,10 @@ func unwindCallTraces(logPrefix string, db ethdb.Database, from, to uint64, chai
 		tos[string(a[:])] = struct{}{}
 	}
 
-	if err := truncateBitmaps(db.(ethdb.HasTx).Tx(), dbutils.CallFromIndex, froms, to); err != nil {
+	if err := truncateBitmaps(db, dbutils.CallFromIndex, froms, to); err != nil {
 		return err
 	}
-	if err := truncateBitmaps(db.(ethdb.HasTx).Tx(), dbutils.CallToIndex, tos, to); err != nil {
+	if err := truncateBitmaps(db, dbutils.CallToIndex, tos, to); err != nil {
 		return err
 	}
 	return nil

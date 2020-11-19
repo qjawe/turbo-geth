@@ -16,6 +16,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
+	"github.com/ledgerwatch/turbo-geth/ethdb/bitmapdb"
 	"github.com/ledgerwatch/turbo-geth/log"
 )
 
@@ -42,11 +43,6 @@ func SpawnAccountHistoryIndex(s *StageState, db ethdb.Database, tmpdir string, q
 	if executionAt == s.BlockNumber {
 		s.Done()
 		return nil
-	}
-
-	start := s.BlockNumber
-	if start > 0 {
-		start++
 	}
 
 	var startChangeSetsLookupAt uint64
@@ -94,11 +90,6 @@ func SpawnStorageHistoryIndex(s *StageState, db ethdb.Database, tmpdir string, q
 	if executionAt == s.BlockNumber {
 		s.Done()
 		return nil
-	}
-
-	start := s.BlockNumber
-	if start > 0 {
-		start++
 	}
 
 	var startChangeSetsLookupAt uint64
@@ -220,7 +211,13 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 
 			currentBitmap.Or(lastChunk) // merge last existing chunk from db - next loop will overwrite it
 		}
-		if err = sendBitmapsByChunks(k, currentBitmap, buf, next); err != nil {
+		if err = bitmapdb.WalkChunkWithKeys(k, currentBitmap, bitmapdb.ChunkLimit, func(chunkKey []byte, chunk *roaring.Bitmap) error {
+			buf.Reset()
+			if _, err = chunk.WriteTo(buf); err != nil {
+				return err
+			}
+			return next(k, chunkKey, buf.Bytes())
+		}); err != nil {
 			return err
 		}
 		currentBitmap.Clear()
@@ -250,7 +247,7 @@ func UnwindAccountHistoryIndex(u *UnwindState, s *StageState, db ethdb.Database,
 	}
 
 	logPrefix := s.state.LogPrefix()
-	if err := unwindHistory(logPrefix, tx, dbutils.PlainAccountChangeSetBucket, u.UnwindPoint+1, quitCh); err != nil {
+	if err := unwindHistory(logPrefix, tx, dbutils.PlainAccountChangeSetBucket, u.UnwindPoint, quitCh); err != nil {
 		return fmt.Errorf("[%s] %w", logPrefix, err)
 	}
 
@@ -282,7 +279,7 @@ func UnwindStorageHistoryIndex(u *UnwindState, s *StageState, db ethdb.Database,
 	}
 
 	logPrefix := s.state.LogPrefix()
-	if err := unwindHistory(logPrefix, tx, dbutils.PlainStorageChangeSetBucket, u.UnwindPoint+1, quitCh); err != nil {
+	if err := unwindHistory(logPrefix, tx, dbutils.PlainStorageChangeSetBucket, u.UnwindPoint, quitCh); err != nil {
 		return fmt.Errorf("[%s] %w", logPrefix, err)
 	}
 
@@ -299,10 +296,20 @@ func UnwindStorageHistoryIndex(u *UnwindState, s *StageState, db ethdb.Database,
 }
 
 func unwindHistory(logPrefix string, db ethdb.Database, csBucket string, to uint64, quitCh <-chan struct{}) error {
+	logEvery := time.NewTicker(30 * time.Second)
+	defer logEvery.Stop()
+
 	updates := map[string]struct{}{}
 	if err := changeset.Walk(db, csBucket, dbutils.EncodeBlockNumber(to), 0, func(blockN uint64, k, v []byte) (bool, error) {
 		if err := common.Stopped(quitCh); err != nil {
 			return false, err
+		}
+		select {
+		default:
+		case <-logEvery.C:
+			var m runtime.MemStats
+			runtime.ReadMemStats(&m)
+			log.Info(fmt.Sprintf("[%s] Progress", logPrefix), "number", blockN, "alloc", common.StorageSize(m.Alloc), "sys", common.StorageSize(m.Sys))
 		}
 		k = dbutils.CompositeKeyWithoutIncarnation(k)
 		updates[string(k)] = struct{}{}
@@ -311,7 +318,7 @@ func unwindHistory(logPrefix string, db ethdb.Database, csBucket string, to uint
 		return err
 	}
 
-	if err := truncateBitmaps(db.(ethdb.HasTx).Tx(), changeset.Mapper[csBucket].IndexBucket, updates, to); err != nil {
+	if err := truncateBitmaps(db, changeset.Mapper[csBucket].IndexBucket, updates, to); err != nil {
 		return err
 	}
 	return nil
