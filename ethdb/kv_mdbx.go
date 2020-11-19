@@ -25,7 +25,7 @@ var (
 	mdbxPutDirectTimer  = metrics.NewRegisteredTimer("mdbx/put/direct", nil)
 	mdbxPutRewriteTimer = metrics.NewRegisteredTimer("mdbx/put/rewrite", nil)
 	mdbxSeekExactTimer  = metrics.NewRegisteredTimer("mdbx/seek/exact", nil)
-	mdbxFreeList        = metrics.NewRegisteredGauge("mdbx/feelist", nil)
+	//mdbxFreeList        = metrics.NewRegisteredGauge("mdbx/feelist", nil)
 )
 
 var _ DbCopier = &MdbxKV{}

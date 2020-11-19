@@ -255,7 +255,7 @@ func TestCursor_Get_KV(t *testing.T) {
 			t.Errorf("unexpected value: %q (not %q)", k, "1")
 		}
 
-		k, v, err = cur.Get([]byte("k0"), []byte("v0"), GetBothRange)
+		_, _, err = cur.Get([]byte("k0"), []byte("v0"), GetBothRange)
 		if !IsErrno(err, NotFound) {
 			t.Errorf("unexpected error: %s", err)
 		}
@@ -340,7 +340,7 @@ func TestDupCmpExcludeSuffix32(t *testing.T) {
 		if err != nil {
 			return err
 		}
-		if !bytes.Equal(v, []byte{1}) {
+		if !bytes.Equal(k, []byte{1}) {
 			t.Errorf("unexpected order: %x (not %x)", k, []byte{1})
 		}
 		if !bytes.Equal(v, hash32Bytes) {
