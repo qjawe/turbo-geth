@@ -123,7 +123,7 @@ func (opts MdbxOpts) Open() (KV, error) {
 		return nil, fmt.Errorf("could not create dir: %s, %w", opts.path, err)
 	}
 
-	var flags uint = 0
+	var flags uint = mdbx.NoReadahead
 	if opts.readOnly {
 		flags |= mdbx.Readonly
 	}
