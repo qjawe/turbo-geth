@@ -34,6 +34,7 @@
  * top-level directory of the distribution or, alternatively, at
  * <http://www.OpenLDAP.org/license.html>. */
 
+#define MDBX_BUILD_SOURCERY a3f54dff1606a90c066286c89f6b2a810ab4830f5821eceeb2dcfd2016bf6491_v0_9_1_126_g862cfb9
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -1138,8 +1139,7 @@ MDBX_INTERNAL_FUNC int mdbx_vasprintf(char **strp, const char *fmt, va_list ap);
 
 #if defined(__linux__) || defined(__gnu_linux__)
 MDBX_INTERNAL_VAR uint32_t mdbx_linux_kernel_version;
-MDBX_INTERNAL_VAR bool
-    mdbx_RunningOnWSL /* Windows Subsystem for Linux is mad and trouble-full */;
+MDBX_INTERNAL_VAR bool mdbx_RunningOnWSL1 /* Windows Subsystem 1 for Linux */;
 #endif /* Linux */
 
 #ifndef mdbx_strdup
@@ -2408,8 +2408,6 @@ struct MDBX_txn {
   MDBX_db *mt_dbs;
   /* Array of sequence numbers for each DB handle */
   unsigned *mt_dbiseqs;
-  /* In write txns, array of cursors for each DB */
-  MDBX_cursor **mt_cursors;
 
   /* Transaction DBI Flags */
 #define DBI_DIRTY MDBX_DBI_DIRTY /* DB was written in this txn */
@@ -2436,6 +2434,8 @@ struct MDBX_txn {
       MDBX_reader *reader;
     } to;
     struct {
+      /* In write txns, array of cursors for each DB */
+      MDBX_cursor **cursors;
       pgno_t *reclaimed_pglist; /* Reclaimed GC pages */
       txnid_t last_reclaimed;   /* ID of last used record */
       pgno_t loose_refund_wl /* FIXME: describe */;
@@ -3565,7 +3565,7 @@ static int readline(MDBX_val *out, MDBX_val *buf) {
 static void usage(void) {
   fprintf(stderr,
           "usage: %s [-V] [-q] [-a] [-f file] [-s name] [-N] [-T] [-r] [-n]"
-          "dbpath\n"
+          " dbpath\n"
           "  -V\t\tprint version and exit\n"
           "  -q\t\tbe quiet\n"
           "  -a\t\tappend records in input order (required for custom "
@@ -3710,7 +3710,7 @@ int main(int argc, char *argv[]) {
     }
   }
 
-  if (envinfo.mi_mapsize) {
+  if (envinfo.mi_geo.current | envinfo.mi_mapsize) {
     if (envinfo.mi_geo.current) {
       rc = mdbx_env_set_geometry(
           env, (intptr_t)envinfo.mi_geo.lower, (intptr_t)envinfo.mi_geo.current,
@@ -3887,15 +3887,22 @@ int main(int argc, char *argv[]) {
       error("mdbx_txn_commit", rc);
       goto env_close;
     }
-    rc = mdbx_dbi_close(env, dbi);
-    if (unlikely(rc != MDBX_SUCCESS)) {
-      error("mdbx_dbi_close", rc);
-      goto env_close;
+    if (subname) {
+      assert(dbi != MAIN_DBI);
+      rc = mdbx_dbi_close(env, dbi);
+      if (unlikely(rc != MDBX_SUCCESS)) {
+        error("mdbx_dbi_close", rc);
+        goto env_close;
+      }
+    } else {
+      assert(dbi == MAIN_DBI);
     }
 
     /* try read next header */
     if (!(mode & NOHDR))
       rc = readhdr();
+    else if (ferror(stdin) || feof(stdin))
+      break;
   }
 
   switch (rc) {

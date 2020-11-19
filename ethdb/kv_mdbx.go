@@ -18,6 +18,14 @@ import (
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/ethdb/mdbx"
 	"github.com/ledgerwatch/turbo-geth/log"
+	"github.com/ledgerwatch/turbo-geth/metrics"
+)
+
+var (
+	mdbxPutDirectTimer  = metrics.NewRegisteredTimer("mdbx/put/direct", nil)
+	mdbxPutRewriteTimer = metrics.NewRegisteredTimer("mdbx/put/rewrite", nil)
+	mdbxSeekExactTimer  = metrics.NewRegisteredTimer("mdbx/seek/exact", nil)
+	mdbxFreeList        = metrics.NewRegisteredGauge("mdbx/feelist", nil)
 )
 
 var _ DbCopier = &MdbxKV{}
@@ -77,8 +85,7 @@ func (opts MdbxOpts) Open() (KV, error) {
 		return nil, err
 	}
 
-	//res := env.SetDebug(mdbx.LogLvlTrace, mdbx.DbgAudit, env.StderrLogger()) // temporary disable error, because it works if call it 1 time, but returns error if call it twice in same process (what often happening in tests)
-	_ = env.SetDebug(mdbx.LogLvlVerbose, mdbx.DbgAssert, mdbx.LoggerDoNotChange) // temporary disable error, because it works if call it 1 time, but returns error if call it twice in same process (what often happening in tests)
+	//_ = env.SetDebug(mdbx.LogLvlExtra, mdbx.DbgAudit, env.StderrLogger()) // temporary disable error, because it works if call it 1 time, but returns error if call it twice in same process (what often happening in tests)
 
 	err = env.SetMaxDBs(100)
 	if err != nil {
@@ -104,7 +111,7 @@ func (opts MdbxOpts) Open() (KV, error) {
 		}
 	}
 
-	if err = env.SetGeometry(-1, -1, int(opts.mapSize), int(10*datasize.GB), -1, -1); err != nil {
+	if err = env.SetGeometry(-1, -1, int(opts.mapSize), int(1*datasize.GB), -1, -1); err != nil {
 		return nil, err
 	}
 
@@ -129,7 +136,7 @@ func (opts MdbxOpts) Open() (KV, error) {
 		flags |= mdbx.Exclusive
 	}
 
-	flags |= mdbx.LifoReclaim
+	//flags |= mdbx.LifoReclaim
 	flags |= mdbx.Coalesce
 	err = env.Open(opts.path, flags, 0664)
 	if err != nil {
@@ -554,6 +561,7 @@ func (tx *mdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 }
 
 func (tx *mdbxTx) ClearBucket(bucket string) error {
+	fmt.Printf("Dropping: %s\n", bucket)
 	if err := tx.dropEvenIfBucketIsNotDeprecated(bucket); err != nil {
 		return err
 	}
@@ -594,8 +602,8 @@ func (tx *mdbxTx) Commit(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if latency.Whole > 20*time.Second {
-		log.Info("Commit", "preparation", latency.Preparation, "gc", latency.GC, "audit", latency.Audit, "write", latency.Preparation, "fsync", latency.Sync, "ending", latency.Ending, "whole", latency.Whole)
+	if latency.Whole > 2*time.Second {
+		log.Info("Commit", "preparation", latency.Preparation, "gc", latency.GC, "audit", latency.Audit, "write", latency.Write, "fsync", latency.Sync, "ending", latency.Ending, "whole", latency.Whole)
 	}
 
 	return nil
@@ -1169,6 +1177,7 @@ func (c *MdbxCursor) putDupSort(key []byte, value []byte) error {
 	}
 
 	if len(key) != from {
+		defer mdbxPutDirectTimer.UpdateSince(time.Now())
 		err := c.putNoOverwrite(key, value)
 		if err != nil {
 			if mdbx.IsKeyExists(err) {
@@ -1178,6 +1187,8 @@ func (c *MdbxCursor) putDupSort(key []byte, value []byte) error {
 		}
 		return nil
 	}
+
+	defer mdbxPutRewriteTimer.UpdateSince(time.Now())
 
 	value = append(key[to:], value...)
 	key = key[:to]
@@ -1227,6 +1238,7 @@ func (c *MdbxCursor) SeekExact(key []byte) ([]byte, []byte, error) {
 			return []byte{}, nil, err
 		}
 	}
+	defer mdbxSeekExactTimer.UpdateSince(time.Now())
 
 	b := c.bucketCfg
 	if b.AutoDupSortKeysConversion && len(key) == b.DupFromLen {
