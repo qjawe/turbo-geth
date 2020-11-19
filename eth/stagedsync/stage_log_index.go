@@ -181,9 +181,13 @@ func promoteLogIndex(logPrefix string, db ethdb.Database, start uint64, bufLimit
 			return err
 		}
 		currentBitmap.Or(lastChunk) // merge last existing chunk from db - next loop will overwrite it
-		if err = sendBitmapsByChunks(k, currentBitmap, buf, next); err != nil {
-			return err
-		}
+		return bitmapdb.WalkChunkWithKeys(k, currentBitmap, bitmapdb.ChunkLimit, func(chunkKey []byte, chunk *roaring.Bitmap) error {
+			buf.Reset()
+			if _, err := chunk.WriteTo(buf); err != nil {
+				return err
+			}
+			return next(k, chunkKey, buf.Bytes())
+		})
 		currentBitmap.Clear()
 		return nil
 	}
@@ -215,7 +219,7 @@ func UnwindLogIndex(u *UnwindState, s *StageState, db ethdb.Database, quitCh <-c
 	}
 
 	logPrefix := s.state.LogPrefix()
-	if err := unwindLogIndex(logPrefix, tx, s.BlockNumber, u.UnwindPoint, quitCh); err != nil {
+	if err := unwindLogIndex(logPrefix, tx, u.UnwindPoint, quitCh); err != nil {
 		return err
 	}
 
@@ -232,7 +236,7 @@ func UnwindLogIndex(u *UnwindState, s *StageState, db ethdb.Database, quitCh <-c
 	return nil
 }
 
-func unwindLogIndex(logPrefix string, db ethdb.DbWithPendingMutations, from, to uint64, quitCh <-chan struct{}) error {
+func unwindLogIndex(logPrefix string, db ethdb.Database, to uint64, quitCh <-chan struct{}) error {
 	topics := map[string]struct{}{}
 	addrs := map[string]struct{}{}
 
@@ -257,10 +261,10 @@ func unwindLogIndex(logPrefix string, db ethdb.DbWithPendingMutations, from, to 
 		return err
 	}
 
-	if err := truncateBitmaps(db.(ethdb.HasTx).Tx(), dbutils.LogTopicIndex, topics, to+1); err != nil {
+	if err := truncateBitmaps(db, dbutils.LogTopicIndex, topics, to); err != nil {
 		return err
 	}
-	if err := truncateBitmaps(db.(ethdb.HasTx).Tx(), dbutils.LogAddressIndex, addrs, to+1); err != nil {
+	if err := truncateBitmaps(db, dbutils.LogAddressIndex, addrs, to); err != nil {
 		return err
 	}
 	return nil
@@ -292,14 +296,14 @@ func flushBitmaps(c *etl.Collector, inMem map[string]*roaring.Bitmap) error {
 	return nil
 }
 
-func truncateBitmaps(tx ethdb.Tx, bucket string, inMem map[string]struct{}, to uint64) error {
+func truncateBitmaps(tx ethdb.Database, bucket string, inMem map[string]struct{}, to uint64) error {
 	keys := make([]string, 0, len(inMem))
 	for k := range inMem {
 		keys = append(keys, k)
 	}
 	sort.Strings(keys)
 	for _, k := range keys {
-		if err := bitmapdb.TruncateRange(tx, bucket, []byte(k), to); err != nil {
+		if err := bitmapdb.TruncateRange(tx, bucket, []byte(k), uint32(to+1)); err != nil {
 			return fmt.Errorf("fail TruncateRange: bucket=%s, %w", bucket, err)
 		}
 	}
@@ -307,27 +311,12 @@ func truncateBitmaps(tx ethdb.Tx, bucket string, inMem map[string]struct{}, to u
 	return nil
 }
 
-func sendBitmapsByChunks(k []byte, m *roaring.Bitmap, buf *bytes.Buffer, next etl.LoadNextFunc) error {
-	nextChunk := bitmapdb.ChunkIterator(m, bitmapdb.ChunkLimit)
-	for chunk := nextChunk(); chunk != nil; chunk = nextChunk() {
+func SendBitmapsByChunks(k []byte, m *roaring.Bitmap, buf *bytes.Buffer, next etl.LoadNextFunc) error {
+	return bitmapdb.WalkChunkWithKeys(k, m, bitmapdb.ChunkLimit, func(chunkKey []byte, chunk *roaring.Bitmap) error {
 		buf.Reset()
-		chunk.RunOptimize()
 		if _, err := chunk.WriteTo(buf); err != nil {
 			return err
 		}
-		chunkKey := make([]byte, len(k)+4)
-		copy(chunkKey, k)
-		if m.GetCardinality() == 0 {
-			binary.BigEndian.PutUint32(chunkKey[len(k):], ^uint32(0))
-			if err := next(k, chunkKey, buf.Bytes()); err != nil {
-				return err
-			}
-			break
-		}
-		binary.BigEndian.PutUint32(chunkKey[len(k):], chunk.Maximum())
-		if err := next(k, chunkKey, buf.Bytes()); err != nil {
-			return err
-		}
-	}
-	return nil
+		return next(k, chunkKey, buf.Bytes())
+	})
 }

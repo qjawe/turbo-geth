@@ -73,7 +73,7 @@ func TestLogIndex(t *testing.T) {
 	require.Equal(2, int(m.GetCardinality()))
 
 	// Unwind test
-	err = unwindLogIndex("logPrefix", tx, 2, 1, nil)
+	err = unwindLogIndex("logPrefix", tx, 1, nil)
 	require.NoError(err)
 
 	m, err = bitmapdb.Get(tx, dbutils.LogAddressIndex, addr1[:], 0, 10_000_000)
@@ -93,7 +93,7 @@ func TestLogIndex(t *testing.T) {
 	require.Equal(1, int(m.GetCardinality()))
 
 	// Unwind test
-	err = unwindLogIndex("logPrefix", tx, 1, 0, nil)
+	err = unwindLogIndex("logPrefix", tx, 0, nil)
 	require.NoError(err)
 
 	m, err = bitmapdb.Get(tx, dbutils.LogAddressIndex, addr1[:], 0, 10_000_000)

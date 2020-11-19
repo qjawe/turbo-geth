@@ -475,6 +475,9 @@ func (tx *mdbxTx) CreateBucket(name string) error {
 		nativeFlags |= mdbx.DupFixed
 		flags ^= dbutils.DupFixed
 	}
+	if flags != 0 {
+		return fmt.Errorf("some not supported flag provided for bucket")
+	}
 
 	dbi, err := tx.tx.OpenDBI(name, nativeFlags, nil, dcmp)
 	if err != nil {

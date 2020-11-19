@@ -69,7 +69,8 @@ var migrations = []Migration{
 	accChangeSetDupSort,
 	storageChangeSetDupSort,
 	transactionsTable,
-	//historyBitmap,
+	historyAccBitmap,
+	historyStorageBitmap,
 }
 
 type Migration struct {

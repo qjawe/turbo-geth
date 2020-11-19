@@ -1,25 +1,29 @@
 package migrations
 
 import (
-	"encoding/binary"
+	"bytes"
 	"fmt"
 	"time"
 
-	"github.com/ledgerwatch/turbo-geth/common"
+	"github.com/RoaringBitmap/roaring"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
+	"github.com/ledgerwatch/turbo-geth/ethdb/bitmapdb"
 	"github.com/ledgerwatch/turbo-geth/log"
 )
 
-var historyBitmap = Migration{
-	Name: "history_bitmap_1",
+var historyAccBitmap = Migration{
+	Name: "history_account_bitmap_4",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
 		logEvery := time.NewTicker(30 * time.Second)
 		defer logEvery.Stop()
-		logPrefix := "history_dup"
+		logPrefix := "history_account_bitmap"
 
 		const loadStep = "load"
+		var prevK []byte
+		blocks := roaring.New()
+		buf := bytes.NewBuffer(nil)
 
 		collectorB, err1 := etl.NewCollectorFromFiles(tmpdir + "1") // B - stands for blocks
 		if err1 != nil {
@@ -61,7 +65,6 @@ var historyBitmap = Migration{
 			}
 			collectorB.Close(logPrefix)
 		}()
-
 		if err = db.Walk(dbutils.AccountsHistoryBucket2, nil, 0, func(k, v []byte) (bool, error) {
 			select {
 			default:
@@ -70,27 +73,43 @@ var historyBitmap = Migration{
 			}
 			index := dbutils.WrapHistoryIndex(v)
 
-			blocks, exists, err := index.Decode()
-			if err != nil {
-				return false, err
+			blockNums, _, errInner := index.Decode()
+			if errInner != nil {
+				return false, errInner
 			}
-			for i, blockN := range blocks {
-				newV := make([]byte, 9)
-				binary.BigEndian.PutUint64(newV, blockN)
-				if exists[i] {
-					newV[8] = 1
-				}
-				//fmt.Printf("%x\n", k[:20])
-				if err := collectorB.Collect(common.CopyBytes(
-					k[:20]), newV); err != nil {
+
+			if prevK != nil && !bytes.Equal(k[:20], prevK[:20]) {
+				if err = bitmapdb.WalkChunkWithKeys(prevK[:20], blocks, bitmapdb.ChunkLimit, func(chunkKey []byte, chunk *roaring.Bitmap) error {
+					buf.Reset()
+					if _, err = chunk.WriteTo(buf); err != nil {
+						return err
+					}
+					return collectorB.Collect(chunkKey, buf.Bytes())
+				}); err != nil {
 					return false, err
 				}
+				blocks.Clear()
 			}
+
+			blocks.AddMany(toU32(blockNums))
+			prevK = k
 			return true, nil
 		}); err != nil {
 			return err
 		}
 
+		if prevK != nil {
+
+			if err = bitmapdb.WalkChunkWithKeys(prevK[:20], blocks, bitmapdb.ChunkLimit, func(chunkKey []byte, chunk *roaring.Bitmap) error {
+				buf.Reset()
+				if _, err = chunk.WriteTo(buf); err != nil {
+					return err
+				}
+				return collectorB.Collect(chunkKey, buf.Bytes())
+			}); err != nil {
+				return err
+			}
+		}
 		if err = db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.AccountsHistoryBucket); err != nil {
 			return fmt.Errorf("clearing the receipt bucket: %w", err)
 		}
@@ -109,4 +128,129 @@ var historyBitmap = Migration{
 		}
 		return nil
 	},
+}
+
+var historyStorageBitmap = Migration{
+	Name: "history_storage_bitmap_8",
+	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
+		logEvery := time.NewTicker(30 * time.Second)
+		defer logEvery.Stop()
+		logPrefix := "history_storage_bitmap"
+
+		const loadStep = "load"
+		var prevK []byte
+		blocks := roaring.New()
+		buf := bytes.NewBuffer(nil)
+
+		collectorB, err1 := etl.NewCollectorFromFiles(tmpdir + "1") // B - stands for blocks
+		if err1 != nil {
+			return err1
+		}
+		switch string(progress) {
+		case "":
+			// can't use files if progress field not set, clear them
+			if collectorB != nil {
+				collectorB.Close(logPrefix)
+				collectorB = nil
+			}
+
+		case loadStep:
+			if collectorB == nil {
+				return ErrMigrationETLFilesDeleted
+			}
+			defer func() {
+				// don't clean if error or panic happened
+				if err != nil {
+					return
+				}
+				if rec := recover(); rec != nil {
+					panic(rec)
+				}
+				collectorB.Close(logPrefix)
+			}()
+			goto LoadStep
+		}
+
+		collectorB = etl.NewCriticalCollector(tmpdir+"1", etl.NewSortableBuffer(etl.BufferOptimalSize*4))
+		defer func() {
+			// don't clean if error or panic happened
+			if err != nil {
+				return
+			}
+			if rec := recover(); rec != nil {
+				panic(rec)
+			}
+			collectorB.Close(logPrefix)
+		}()
+		if err = db.Walk(dbutils.StorageHistoryBucket2, nil, 0, func(k, v []byte) (bool, error) {
+			select {
+			default:
+			case <-logEvery.C:
+				log.Info(fmt.Sprintf("[%s] Progress2", logPrefix), "key", fmt.Sprintf("%x", k))
+			}
+			index := dbutils.WrapHistoryIndex(v)
+
+			blockNums, _, errInner := index.Decode()
+			if errInner != nil {
+				return false, errInner
+			}
+
+			if prevK != nil && !bytes.Equal(k[:52], prevK[:52]) {
+				if err = bitmapdb.WalkChunkWithKeys(prevK[:52], blocks, bitmapdb.ChunkLimit, func(chunkKey []byte, chunk *roaring.Bitmap) error {
+					buf.Reset()
+					if _, err = chunk.WriteTo(buf); err != nil {
+						return err
+					}
+					return collectorB.Collect(chunkKey, buf.Bytes())
+				}); err != nil {
+					return false, err
+				}
+				blocks.Clear()
+			}
+
+			blocks.AddMany(toU32(blockNums))
+			prevK = k
+			return true, nil
+		}); err != nil {
+			return err
+		}
+
+		if prevK != nil {
+			if err = bitmapdb.WalkChunkWithKeys(prevK[:52], blocks, bitmapdb.ChunkLimit, func(chunkKey []byte, chunk *roaring.Bitmap) error {
+				buf.Reset()
+				if _, err = chunk.WriteTo(buf); err != nil {
+					return err
+				}
+				return collectorB.Collect(chunkKey, buf.Bytes())
+			}); err != nil {
+				return err
+			}
+		}
+
+		if err = db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.StorageHistoryBucket); err != nil {
+			return fmt.Errorf("clearing the receipt bucket: %w", err)
+		}
+
+		// Commit clearing of the bucket - freelist should now be written to the database
+		if err = CommitProgress(db, []byte(loadStep), false); err != nil {
+			return fmt.Errorf("committing the removal of receipt table: %w", err)
+		}
+
+	LoadStep:
+		// Now transaction would have been re-opened, and we should be re-using the space
+		if err = collectorB.Load(logPrefix, db, dbutils.StorageHistoryBucket, etl.IdentityLoadFunc, etl.TransformArgs{
+			OnLoadCommit: CommitProgress,
+		}); err != nil {
+			return fmt.Errorf("loading the transformed data back into the bodies table: %w", err)
+		}
+		return nil
+	},
+}
+
+func toU32(in []uint64) []uint32 {
+	out := make([]uint32, len(in))
+	for i := range in {
+		out[i] = uint32(in[i])
+	}
+	return out
 }
