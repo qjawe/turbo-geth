@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/RoaringBitmap/roaring"
+	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/common/changeset"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
@@ -54,7 +55,7 @@ func SpawnAccountHistoryIndex(s *StageState, db ethdb.Database, tmpdir string, q
 	}
 	stopChangeSetsLookupAt := executionAt + 1
 
-	if err := promoteHistory(logPrefix, tx, dbutils.PlainAccountChangeSetBucket, startChangeSetsLookupAt, stopChangeSetsLookupAt, tmpdir, quitCh); err != nil {
+	if err := promoteHistory(logPrefix, tx, dbutils.PlainAccountChangeSetBucket, startChangeSetsLookupAt, stopChangeSetsLookupAt, bitmapsBufLimit, bitmapsFlushEvery, tmpdir, quitCh); err != nil {
 		return fmt.Errorf("[%s] %w", logPrefix, err)
 	}
 
@@ -106,7 +107,7 @@ func SpawnStorageHistoryIndex(s *StageState, db ethdb.Database, tmpdir string, q
 	}
 	stopChangeSetsLookupAt := executionAt + 1
 
-	if err := promoteHistory(logPrefix, tx, dbutils.PlainStorageChangeSetBucket, startChangeSetsLookupAt, stopChangeSetsLookupAt, tmpdir, quitCh); err != nil {
+	if err := promoteHistory(logPrefix, tx, dbutils.PlainStorageChangeSetBucket, startChangeSetsLookupAt, stopChangeSetsLookupAt, bitmapsBufLimit, bitmapsFlushEvery, tmpdir, quitCh); err != nil {
 		return fmt.Errorf("[%s] %w", logPrefix, err)
 	}
 
@@ -122,17 +123,17 @@ func SpawnStorageHistoryIndex(s *StageState, db ethdb.Database, tmpdir string, q
 	return nil
 }
 
-func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string, start, stop uint64, tmpdir string, quit <-chan struct{}) error {
+func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string, start, stop uint64, bufLimit datasize.ByteSize, flushEvery time.Duration, tmpdir string, quit <-chan struct{}) error {
 	logEvery := time.NewTicker(30 * time.Second)
 	defer logEvery.Stop()
 
 	updates := map[string]*roaring.Bitmap{}
 	creates := map[string]*roaring.Bitmap{}
-	checkFlushEvery := time.NewTicker(logIndicesCheckSizeEvery)
+	checkFlushEvery := time.NewTicker(flushEvery)
 	defer checkFlushEvery.Stop()
 
 	collectorUpdates := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
-	collectorCreates := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
+	//collectorCreates := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
 
 	if err := changeset.Walk(db, changesetBucket, dbutils.EncodeBlockNumber(start), 0, func(blockN uint64, k, v []byte) (bool, error) {
 		if blockN >= stop {
@@ -151,19 +152,19 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 			runtime.ReadMemStats(&m)
 			log.Info(fmt.Sprintf("[%s] Progress", logPrefix), "number", blockN, "alloc", common.StorageSize(m.Alloc), "sys", common.StorageSize(m.Sys))
 		case <-checkFlushEvery.C:
-			if needFlush(updates, bitmapsBufLimit) {
+			if needFlush(updates, bufLimit) {
 				if err := flushBitmaps(collectorUpdates, updates); err != nil {
 					return false, err
 				}
 				updates = map[string]*roaring.Bitmap{}
 			}
 
-			if needFlush(creates, bitmapsBufLimit) {
-				if err := flushBitmaps(collectorCreates, creates); err != nil {
-					return false, err
-				}
-				creates = map[string]*roaring.Bitmap{}
-			}
+			//if needFlush(creates, bitmapsBufLimit) {
+			//	if err := flushBitmaps(collectorCreates, creates); err != nil {
+			//		return false, err
+			//	}
+			//	creates = map[string]*roaring.Bitmap{}
+			//}
 		}
 
 		kStr := string(k)
@@ -190,15 +191,19 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 	if err := flushBitmaps(collectorUpdates, updates); err != nil {
 		return err
 	}
-	if err := flushBitmaps(collectorCreates, creates); err != nil {
-		return err
-	}
+	//if err := flushBitmaps(collectorCreates, creates); err != nil {
+	//	return err
+	//}
 
 	var currentBitmap = roaring.New()
 	var buf = bytes.NewBuffer(nil)
 
 	lastChunkKey := make([]byte, 128)
 	var loaderFunc = func(k []byte, v []byte, table etl.CurrentTableReader, next etl.LoadNextFunc) error {
+		if _, err := currentBitmap.FromBuffer(v); err != nil {
+			return err
+		}
+
 		lastChunkKey = lastChunkKey[:len(k)+4]
 		copy(lastChunkKey, k)
 		binary.BigEndian.PutUint32(lastChunkKey[len(k):], ^uint32(0))
@@ -206,19 +211,15 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 		if err != nil && !errors.Is(err, ethdb.ErrKeyNotFound) {
 			return fmt.Errorf("find last chunk failed: %w", err)
 		}
-
-		lastChunk := roaring.New()
 		if len(lastChunkBytes) > 0 {
+			lastChunk := roaring.New()
 			_, err = lastChunk.FromBuffer(lastChunkBytes)
 			if err != nil {
 				return fmt.Errorf("couldn't read last log index chunk: %w, len(lastChunkBytes)=%d", err, len(lastChunkBytes))
 			}
-		}
 
-		if _, err := currentBitmap.FromBuffer(v); err != nil {
-			return err
+			currentBitmap.Or(lastChunk) // merge last existing chunk from db - next loop will overwrite it
 		}
-		currentBitmap.Or(lastChunk) // merge last existing chunk from db - next loop will overwrite it
 		if err = sendBitmapsByChunks(k, currentBitmap, buf, next); err != nil {
 			return err
 		}
@@ -300,9 +301,6 @@ func UnwindStorageHistoryIndex(u *UnwindState, s *StageState, db ethdb.Database,
 func unwindHistory(logPrefix string, db ethdb.Database, csBucket string, to uint64, quitCh <-chan struct{}) error {
 	updates := map[string]struct{}{}
 	if err := changeset.Walk(db, csBucket, dbutils.EncodeBlockNumber(to), 0, func(blockN uint64, k, v []byte) (bool, error) {
-		if blockN >= to {
-			return false, nil
-		}
 		if err := common.Stopped(quitCh); err != nil {
 			return false, err
 		}

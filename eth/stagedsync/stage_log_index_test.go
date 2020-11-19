@@ -3,6 +3,7 @@ package stagedsync
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
@@ -51,7 +52,7 @@ func TestLogIndex(t *testing.T) {
 	err = rawdb.AppendReceipts(tx, 2, receipts2)
 	require.NoError(err)
 
-	err = promoteLogIndex("logPrefix", tx, 0, "", nil)
+	err = promoteLogIndex("logPrefix", tx, 0, 10, time.Millisecond, "", nil)
 	require.NoError(err)
 
 	// Check indices GetCardinality (in how many blocks they meet)
