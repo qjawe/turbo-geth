@@ -106,14 +106,13 @@ ethdb/mdbx/dist/libmdbx.a:
 	cd ethdb/mdbx/dist/ && make libmdbx.a && cat config.h
 
 test: ethdb/mdbx/dist/libmdbx.a
-	$(GOTEST)
-	du -h
+	TEST_DB=mdbx $(GOTEST)
 
 test-lmdb:
 	TEST_DB=lmdb $(GOTEST)
 
 test-mdbx: ethdb/mdbx/dist/libmdbx.a
-	TEST_DB=mdbx $(GOTEST_MDBX)
+	TEST_DB=mdbx $(GOTEST)
 
 lint: lintci
 
