@@ -31,6 +31,7 @@ var (
 	lmdbPutUpsert2Timer     = metrics.NewRegisteredTimer("lmdb/put/upsert2", nil)
 	lmdbDelCurrentTimer     = metrics.NewRegisteredTimer("lmdb/del/current", nil)
 	lmdbSeekExactTimer      = metrics.NewRegisteredTimer("lmdb/seek/exact", nil)
+	lmdbSeekExact2Timer     = metrics.NewRegisteredTimer("lmdb/seek/exact2", nil)
 )
 
 const (
@@ -1306,11 +1307,12 @@ func (c *LmdbCursor) SeekExact(key []byte) ([]byte, []byte, error) {
 
 	b := c.bucketCfg
 	if b.AutoDupSortKeysConversion && len(key) == b.DupFromLen {
-		if c.bucketName == dbutils.PlainStateBucket {
-			defer lmdbSeekExactTimer.UpdateSince(time.Now())
-		}
 		from, to := b.DupFromLen, b.DupToLen
+		t := time.Now()
 		k, v, err := c.getBothRange(key[:to], key[to:])
+		if c.bucketName == dbutils.PlainStateBucket {
+			lmdbSeekExactTimer.UpdateSince(t)
+		}
 		if err != nil {
 			if lmdb.IsNotFound(err) {
 				return nil, nil, nil
@@ -1323,7 +1325,11 @@ func (c *LmdbCursor) SeekExact(key []byte) ([]byte, []byte, error) {
 		return k, v[from-to:], nil
 	}
 
+	t := time.Now()
 	k, v, err := c.set(key)
+	if c.bucketName == dbutils.PlainStateBucket {
+		lmdbSeekExact2Timer.UpdateSince(t)
+	}
 	if err != nil {
 		if lmdb.IsNotFound(err) {
 			return nil, nil, nil
