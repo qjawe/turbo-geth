@@ -167,7 +167,7 @@ func walkAndCollect(collectorFunc func([]byte, []byte) error, db ethdb.Getter, b
 		if timestamp > timestampSrc {
 			return false, nil
 		}
-		if innerErr := collectorFunc(common.CopyBytes(k), common.CopyBytes(v)); innerErr != nil {
+		if innerErr := collectorFunc(k, v); innerErr != nil {
 			return false, innerErr
 		}
 		return true, nil
