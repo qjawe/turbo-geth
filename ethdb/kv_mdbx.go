@@ -30,6 +30,7 @@ var (
 	mdbxPutUpsert2Timer     = metrics.NewRegisteredTimer("mdbx/put/upsert2", nil)
 	mdbxDelCurrentTimer     = metrics.NewRegisteredTimer("mdbx/del/current", nil)
 	mdbxSeekExactTimer      = metrics.NewRegisteredTimer("mdbx/seek/exact", nil)
+	mdbxSeekExact2Timer     = metrics.NewRegisteredTimer("mdbx/seek/exact2", nil)
 	//mdbxFreeList        = metrics.NewRegisteredGauge("mdbx/feelist", nil)
 )
 
@@ -1283,11 +1284,12 @@ func (c *MdbxCursor) SeekExact(key []byte) ([]byte, []byte, error) {
 
 	b := c.bucketCfg
 	if b.AutoDupSortKeysConversion && len(key) == b.DupFromLen {
-		if c.bucketName == dbutils.PlainStateBucket {
-			defer mdbxSeekExactTimer.UpdateSince(time.Now())
-		}
 		from, to := b.DupFromLen, b.DupToLen
+		t := time.Now()
 		k, v, err := c.getBothRange(key[:to], key[to:])
+		if c.bucketName == dbutils.PlainStateBucket {
+			mdbxSeekExactTimer.UpdateSince(t)
+		}
 		if err != nil {
 			if mdbx.IsNotFound(err) {
 				return nil, nil, nil
@@ -1300,14 +1302,19 @@ func (c *MdbxCursor) SeekExact(key []byte) ([]byte, []byte, error) {
 		return k, v[from-to:], nil
 	}
 
-	_, v, err := c.set(key)
+	t := time.Now()
+	k, v, err := c.set(key)
+	if c.bucketName == dbutils.PlainStateBucket {
+		mdbxSeekExact2Timer.UpdateSince(t)
+	}
 	if err != nil {
 		if mdbx.IsNotFound(err) {
 			return nil, nil, nil
 		}
 		return []byte{}, nil, err
 	}
-	return []byte{}, v, nil
+	return k, v, nil
+
 }
 
 // Append - speedy feature of mdbx which is not part of KV interface.
