@@ -107,7 +107,7 @@ ethdb/mdbx/dist/libmdbx.a:
 		&& make config.h \
 		&& echo '#define MDBX_HUGE_TRANSACTIONS 1' > config.h \
 		&& echo '#define MDBX_TXN_CHECKOWNER 1' > config.h \
-		&& make libmdbx.a
+		&& CFLAGS_EXTRA="-Wno-deprecated-declarations" make libmdbx.a
 
 test: ethdb/mdbx/dist/libmdbx.a
 	TEST_DB=mdbx $(GOTEST)
