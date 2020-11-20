@@ -119,12 +119,10 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 	defer logEvery.Stop()
 
 	updates := map[string]*roaring.Bitmap{}
-	creates := map[string]*roaring.Bitmap{}
 	checkFlushEvery := time.NewTicker(flushEvery)
 	defer checkFlushEvery.Stop()
 
 	collectorUpdates := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
-	//collectorCreates := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
 
 	if err := changeset.Walk(db, changesetBucket, dbutils.EncodeBlockNumber(start), 0, func(blockN uint64, k, v []byte) (bool, error) {
 		if blockN >= stop {
@@ -149,24 +147,9 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 				}
 				updates = map[string]*roaring.Bitmap{}
 			}
-
-			//if needFlush(creates, bitmapsBufLimit) {
-			//	if err := flushBitmaps(collectorCreates, creates); err != nil {
-			//		return false, err
-			//	}
-			//	creates = map[string]*roaring.Bitmap{}
-			//}
 		}
 
 		kStr := string(k)
-		if len(v) == 0 {
-			m, ok := creates[kStr]
-			if !ok {
-				m = roaring.New()
-				creates[kStr] = m
-			}
-			m.Add(uint32(blockN))
-		}
 		m, ok := updates[kStr]
 		if !ok {
 			m = roaring.New()
@@ -182,9 +165,6 @@ func promoteHistory(logPrefix string, db ethdb.Database, changesetBucket string,
 	if err := flushBitmaps(collectorUpdates, updates); err != nil {
 		return err
 	}
-	//if err := flushBitmaps(collectorCreates, creates); err != nil {
-	//	return err
-	//}
 
 	var currentBitmap = roaring.New()
 	var buf = bytes.NewBuffer(nil)
