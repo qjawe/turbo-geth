@@ -17,6 +17,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/eth/stagedsync"
 	"github.com/ledgerwatch/turbo-geth/eth/stagedsync/stages"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
+	"github.com/ledgerwatch/turbo-geth/ethdb/bitmapdb"
 	"github.com/ledgerwatch/turbo-geth/log"
 	"github.com/spf13/cobra"
 )
@@ -90,14 +91,14 @@ func syncBySmallSteps(db ethdb.Database, ctx context.Context) error {
 		}
 	}
 
-	var tx ethdb.DbWithPendingMutations = ethdb.NewTxDbWithoutTransaction(db, ethdb.RW)
+	var tx ethdb.DbWithPendingMutations = ethdb.NewTxDbWithoutTransaction(db, ethdb.RW|ethdb.NoSync)
 	defer tx.Rollback()
 
 	cc, bc, st, progress := newSync(ch, db, tx, changeSetHook)
 	defer bc.Stop()
 	cc.SetDB(tx)
 
-	tx, err = tx.Begin(ctx, ethdb.RW)
+	tx, err = tx.Begin(ctx, ethdb.RW|ethdb.NoSync)
 	if err != nil {
 		return err
 	}
@@ -121,10 +122,6 @@ func syncBySmallSteps(db ethdb.Database, ctx context.Context) error {
 		default:
 		}
 
-		if progress(stages.Execution).BlockNumber == stopAt {
-			break
-		}
-
 		if err := tx.CommitAndBegin(context.Background()); err != nil {
 			return err
 		}
@@ -133,7 +130,7 @@ func syncBySmallSteps(db ethdb.Database, ctx context.Context) error {
 		execAtBlock := progress(stages.Execution).BlockNumber
 		execToBlock := block
 		if unwindEvery != 0 || unwind != 0 {
-			execToBlock = execAtBlock - unwind + unwindEvery
+			execToBlock = execAtBlock + unwindEvery
 		}
 		if execToBlock > stopAt {
 			execToBlock = stopAt + 1
@@ -262,14 +259,12 @@ func checkHistory(db ethdb.Database, changeSetBucket string, blockNum uint64) er
 	}
 
 	if err := changeset.Walk(db, changeSetBucket, currentKey, 0, func(blockN uint64, k, v []byte) (bool, error) {
-		indexBytes, innerErr := db.GetIndexChunk(vv.IndexBucket, k, blockN)
+		bm, innerErr := bitmapdb.Get(db, vv.IndexBucket, k, uint32(blockN-1), uint32(blockN+1))
 		if innerErr != nil {
 			return false, innerErr
 		}
-
-		index := dbutils.WrapHistoryIndex(indexBytes)
-		if findVal, _, ok := index.Search(blockN); !ok {
-			return false, fmt.Errorf("%v,%v,%v", blockN, findVal, common.Bytes2Hex(k))
+		if !bm.Contains(uint32(blockN)) {
+			return false, fmt.Errorf("%v,%v", blockN, common.Bytes2Hex(k))
 		}
 		return true, nil
 	}); err != nil {

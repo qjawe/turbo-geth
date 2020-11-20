@@ -480,11 +480,18 @@ func (tx *lmdbTx) CreateBucket(name string) error {
 	if !tx.db.opts.readOnly {
 		nativeFlags |= lmdb.Create
 	}
-	switch flags {
-	case dbutils.DupSort:
+
+	if flags&dbutils.DupSort != 0 {
 		nativeFlags |= lmdb.DupSort
-	case dbutils.DupFixed:
+		flags ^= dbutils.DupSort
+	}
+	if flags&dbutils.DupFixed != 0 {
 		nativeFlags |= lmdb.DupFixed
+		flags ^= dbutils.DupFixed
+	}
+
+	if flags != 0 {
+		return fmt.Errorf("some not supported flag provided for bucket")
 	}
 	dbi, err := tx.tx.OpenDBI(name, nativeFlags)
 	if err != nil {
@@ -604,9 +611,9 @@ func (tx *lmdbTx) Commit(ctx context.Context) error {
 		log.Info("Batch", "commit", commitTook)
 	}
 
-	if !tx.isSubTx && !tx.db.opts.readOnly && !tx.db.opts.inMem && tx.flags&NoSync == 0 { // call fsync only after main transaction commit
+	if !tx.isSubTx && !tx.db.opts.readOnly && !tx.db.opts.inMem { // call fsync only after main transaction commit
 		fsyncTimer := time.Now()
-		if err := tx.db.env.Sync(false); err != nil {
+		if err := tx.db.env.Sync(tx.flags&NoSync == 0); err != nil {
 			log.Warn("fsync after commit failed", "err", err)
 		}
 		fsyncTook := time.Since(fsyncTimer)

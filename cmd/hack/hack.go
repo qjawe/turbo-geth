@@ -1114,7 +1114,7 @@ func ValidateTxLookups2(chaindata string) {
 	log.Info("All done", "duration", time.Since(startTime))
 }
 
-func validateTxLookups2(db rawdb.DatabaseReader, startBlock uint64, interruptCh chan bool) {
+func validateTxLookups2(db ethdb.Database, startBlock uint64, interruptCh chan bool) {
 	blockNum := startBlock
 	iterations := 0
 	var interrupt bool
@@ -1918,7 +1918,7 @@ func mint(chaindata string, block uint64) error {
 		c = tx.Cursor(dbutils.BlockBodyPrefix)
 		var prevBlock uint64
 		var burntGas uint64
-		for k, v, err := c.Seek(blockEncoded); k != nil; k, v, err = c.Next() {
+		for k, _, err := c.Seek(blockEncoded); k != nil; k, _, err = c.Next() {
 			if err != nil {
 				return err
 			}
@@ -1931,14 +1931,7 @@ func mint(chaindata string, block uint64) error {
 				fmt.Printf("Gap [%d-%d]\n", prevBlock, blockNumber-1)
 			}
 			prevBlock = blockNumber
-			bodyRlp, err := rawdb.DecompressBlockBody(v)
-			if err != nil {
-				return err
-			}
-			body := new(types.Body)
-			if err := rlp.Decode(bytes.NewReader(bodyRlp), body); err != nil {
-				return fmt.Errorf("invalid block body RLP: %w", err)
-			}
+			body := rawdb.ReadBody(db, blockHash, blockNumber)
 			header := rawdb.ReadHeader(db, blockHash, blockNumber)
 			senders := rawdb.ReadSenders(db, blockHash, blockNumber)
 			var ethSpent uint256.Int
@@ -2017,30 +2010,56 @@ func receiptSizes(chaindata string) error {
 		return err
 	}
 	defer tx.Rollback()
-
-	fmt.Printf("bucket: %s\n", dbutils.Log)
-	c := tx.Cursor(dbutils.Log)
+	fmt.Printf("bucket: %s\n", dbutils.AccountsHistoryBucket)
+	c := tx.CursorDupFixed(dbutils.AccountsHistoryBucket)
 	defer c.Close()
+	for {
+		k, first, err := c.NextNoDup()
+		if err != nil {
+			panic(err)
+		}
+		if k == nil {
+			break
+		}
+
+		stride := len(first)
+		//fmt.Printf("%x\n", k)
+		for {
+			k, v, err := c.NextMulti()
+			if err != nil {
+				panic(err)
+			}
+			if k == nil {
+				break
+			}
+			multi := lmdb.WrapMulti(v, stride)
+			for i := 0; i < multi.Len(); i++ {
+				//fmt.Printf("	%x \n", multi.Val(i))
+			}
+		}
+	}
+	//
 	sizes := make(map[int]int)
 	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 		if err != nil {
 			return err
 		}
+		fmt.Printf("1,%x, %x\n", k, v)
 		sizes[len(v)]++
 	}
-	var lens = make([]int, len(sizes))
-	i := 0
-	for l := range sizes {
-		lens[i] = l
-		i++
-	}
-	sort.Ints(lens)
-	for _, l := range lens {
-		if sizes[l] < 100000 {
-			continue
-		}
-		fmt.Printf("%6d - %d\n", l, sizes[l])
-	}
+	//var lens = make([]int, len(sizes))
+	//i := 0
+	//for l := range sizes {
+	//	lens[i] = l
+	//	i++
+	//}
+	//sort.Ints(lens)
+	//for _, l := range lens {
+	//	if sizes[l] < 1 {
+	//		continue
+	//	}
+	//	fmt.Printf("%6d - %d\n", l, sizes[l])
+	//}
 	return nil
 }
 
@@ -2065,7 +2084,7 @@ func dupSz(chaindata string) error {
 		total += len(k) + len(v) + 8
 		for k, v, err := c.NextDup(); k != nil; k, v, err = c.NextDup() {
 			check(err)
-			total += len(v) + 8
+			total += len(v)
 			//fmt.Printf("\t%x\n", v)
 		}
 	}
