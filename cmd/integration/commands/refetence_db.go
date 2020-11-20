@@ -8,12 +8,13 @@ import (
 	"fmt"
 	"os"
 	"strings"
-	"sync"
 	"time"
 
+	"github.com/ledgerwatch/lmdb-go/lmdb"
 	"github.com/ledgerwatch/turbo-geth/cmd/utils"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
+	"github.com/ledgerwatch/turbo-geth/ethdb/mdbx"
 	"github.com/ledgerwatch/turbo-geth/log"
 	"github.com/spf13/cobra"
 )
@@ -290,60 +291,17 @@ func fToMdbx(ctx context.Context, to string) error {
 
 	return nil
 }
-
 func toMdbx(ctx context.Context, from, to string) error {
 	_ = os.RemoveAll(to)
 
-	src := ethdb.NewLMDB().Path(from).MustOpen()
-	dst := ethdb.NewMDBX().Path(to).MustOpen()
+	src := ethdb.NewLMDB().Path(from).Flags(lmdb.Readonly).MustOpen()
+	dst := ethdb.NewMDBX().Path(to).Flags(mdbx.WriteMap | mdbx.UtterlyNoSync | mdbx.NoMemInit).MustOpen()
 	srcTx, err1 := src.Begin(ctx, nil, ethdb.RO)
 	if err1 != nil {
 		return err1
 	}
 	defer srcTx.Rollback()
-
-	wg := sync.WaitGroup{}
-	ch := make(chan Row, 10_000_000)
-	wg.Add(1)
-	go func() {
-		defer wg.Done()
-		if err := wr(dst, ch, ctx); err != nil {
-			panic(err)
-		}
-	}()
-
-	for name, b := range dbutils.BucketsConfigs {
-		if b.IsDeprecated {
-			continue
-		}
-
-		srcC := srcTx.Cursor(name)
-		ch <- Row{bucket: name}
-		for k, v, err := srcC.First(); k != nil; k, v, err = srcC.Next() {
-			if err != nil {
-				return err
-			}
-			ch <- Row{k: k, v: v}
-		}
-	}
-	close(ch)
-
-	wg.Wait()
-	srcTx.Rollback()
-	return nil
-}
-
-type Row struct {
-	bucket string
-	k      []byte
-	v      []byte
-}
-
-func wr(kv ethdb.KV, ch chan Row, ctx context.Context) error {
-	commitEvery := time.NewTicker(10 * time.Second)
-	defer commitEvery.Stop()
-
-	dstTx, err1 := kv.Begin(ctx, nil, ethdb.RW|ethdb.NoSync)
+	dstTx, err1 := dst.Begin(ctx, nil, ethdb.RW)
 	if err1 != nil {
 		return err1
 	}
@@ -351,45 +309,53 @@ func wr(kv ethdb.KV, ch chan Row, ctx context.Context) error {
 		dstTx.Rollback()
 	}()
 
-	var c ethdb.Cursor
-	var appendFunc func(k []byte, v []byte) error
-	var bucket string
-	for row := range ch {
-		if row.bucket != "" {
-			bucket = row.bucket
-			c = dstTx.Cursor(bucket)
-			b := dbutils.BucketsConfigs[bucket]
-			appendFunc = c.Append
-			if b.Flags&dbutils.DupSort != 0 && !b.AutoDupSortKeysConversion {
-				appendFunc = c.(ethdb.CursorDupSort).AppendDup
-			}
+	logEvery := time.NewTicker(15 * time.Second)
+	defer logEvery.Stop()
+
+	commitEvery := time.NewTicker(30 * time.Second)
+	defer commitEvery.Stop()
+
+	for name, b := range dbutils.BucketsConfigs {
+		if b.IsDeprecated {
 			continue
 		}
 
-		select {
-		default:
-		case <-ctx.Done():
-			return ctx.Err()
-		case <-commitEvery.C:
-			log.Info("Progress", "bucket", bucket, "key", fmt.Sprintf("%x", row.k), "chan", len(ch))
-			if err2 := dstTx.Commit(ctx); err2 != nil {
-				return err2
-			}
-			var err error
-			dstTx, err = kv.Begin(ctx, nil, ethdb.RW|ethdb.NoSync)
+		c := dstTx.Cursor(name)
+		appendFunc := c.Append
+		if b.Flags&dbutils.DupSort != 0 && !b.AutoDupSortKeysConversion {
+			appendFunc = c.(ethdb.CursorDupSort).AppendDup
+		}
+
+		srcC := srcTx.Cursor(name)
+		for k, v, err := srcC.First(); k != nil; k, v, err = srcC.Next() {
 			if err != nil {
 				return err
 			}
-			c = dstTx.Cursor(bucket)
-			appendFunc = c.Append
-			b := dbutils.BucketsConfigs[bucket]
-			if b.Flags&dbutils.DupSort != 0 && !b.AutoDupSortKeysConversion {
-				appendFunc = c.(ethdb.CursorDupSort).AppendDup
-			}
-		}
 
-		if err := appendFunc(row.k, row.v); err != nil {
-			return err
+			if err = appendFunc(k, v); err != nil {
+				return err
+			}
+
+			select {
+			default:
+			case <-ctx.Done():
+				return ctx.Err()
+			case <-logEvery.C:
+				log.Info("Progress", "bucket", name, "key", fmt.Sprintf("%x", k))
+			case <-commitEvery.C:
+				if err2 := dstTx.Commit(ctx); err2 != nil {
+					return err2
+				}
+				dstTx, err = dst.Begin(ctx, nil, ethdb.RW)
+				if err != nil {
+					return err
+				}
+				c = dstTx.Cursor(name)
+				appendFunc = c.Append
+				if b.Flags&dbutils.DupSort != 0 && !b.AutoDupSortKeysConversion {
+					appendFunc = c.(ethdb.CursorDupSort).AppendDup
+				}
+			}
 		}
 	}
 
@@ -397,5 +363,6 @@ func wr(kv ethdb.KV, ch chan Row, ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	srcTx.Rollback()
 	return nil
 }

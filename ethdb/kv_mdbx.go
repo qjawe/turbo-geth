@@ -39,7 +39,7 @@ var _ DbCopier = &MdbxKV{}
 type MdbxOpts struct {
 	inMem            bool
 	exclusive        bool
-	readOnly         bool
+	flags            uint
 	path             string
 	bucketsCfg       BucketConfigsFunc
 	mapSize          datasize.ByteSize
@@ -65,6 +65,11 @@ func (opts MdbxOpts) Exclusive() MdbxOpts {
 	return opts
 }
 
+func (opts MdbxOpts) Flags(flags uint) MdbxOpts {
+	opts.flags = flags
+	return opts
+}
+
 func (opts MdbxOpts) MapSize(sz datasize.ByteSize) MdbxOpts {
 	opts.mapSize = sz
 	return opts
@@ -72,11 +77,6 @@ func (opts MdbxOpts) MapSize(sz datasize.ByteSize) MdbxOpts {
 
 func (opts MdbxOpts) MaxFreelistReuse(pages uint) MdbxOpts {
 	opts.maxFreelistReuse = pages
-	return opts
-}
-
-func (opts MdbxOpts) ReadOnly() MdbxOpts {
-	opts.readOnly = true
 	return opts
 }
 
@@ -129,10 +129,7 @@ func (opts MdbxOpts) Open() (KV, error) {
 		return nil, fmt.Errorf("could not create dir: %s, %w", opts.path, err)
 	}
 
-	var flags uint = mdbx.NoReadahead
-	if opts.readOnly {
-		flags |= mdbx.Readonly
-	}
+	var flags uint = opts.flags | mdbx.NoReadahead
 	if opts.inMem {
 		flags |= mdbx.NoMetaSync | mdbx.SafeNoSync
 	} else {
@@ -162,7 +159,7 @@ func (opts MdbxOpts) Open() (KV, error) {
 	}
 
 	// Open or create buckets
-	if opts.readOnly {
+	if opts.flags&mdbx.Readonly != 0 {
 		tx, innerErr := db.Begin(context.Background(), nil, RO)
 		if innerErr != nil {
 			return nil, innerErr
@@ -474,7 +471,7 @@ func (db *MdbxKV) Update(ctx context.Context, f func(tx Tx) error) (err error) {
 func (tx *mdbxTx) CreateBucket(name string) error {
 	var flags = tx.db.buckets[name].Flags
 	var nativeFlags uint
-	if !tx.db.opts.readOnly {
+	if tx.db.opts.flags&mdbx.Readonly == 0 {
 		nativeFlags |= mdbx.Create
 	}
 	cnfCopy := tx.db.buckets[name]
