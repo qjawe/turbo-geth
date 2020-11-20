@@ -65,7 +65,7 @@ var historyAccBitmap = Migration{
 			}
 			collectorB.Close(logPrefix)
 		}()
-		if err = db.Walk(dbutils.AccountsHistoryBucket2, nil, 0, func(k, v []byte) (bool, error) {
+		if err = db.Walk(dbutils.AccountsHistoryBucket, nil, 0, func(k, v []byte) (bool, error) {
 			select {
 			default:
 			case <-logEvery.C:
@@ -182,7 +182,7 @@ var historyStorageBitmap = Migration{
 			}
 			collectorB.Close(logPrefix)
 		}()
-		if err = db.Walk(dbutils.StorageHistoryBucket2, nil, 0, func(k, v []byte) (bool, error) {
+		if err = db.Walk(dbutils.StorageHistoryBucket, nil, 0, func(k, v []byte) (bool, error) {
 			select {
 			default:
 			case <-logEvery.C:
