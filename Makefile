@@ -103,7 +103,11 @@ db-tools:
 
 ethdb/mdbx/dist/libmdbx.a:
 	echo "Building mdbx"
-	cd ethdb/mdbx/dist/ && make libmdbx.a && cat config.h
+	cd ethdb/mdbx/dist/ \
+		&& make config.h \
+		&& echo '#define MDBX_HUGE_TRANSACTIONS 1' > config.h \
+		&& echo '#define MDBX_TXN_CHECKOWNER 1' > config.h \
+		&& make libmdbx.a
 
 test: ethdb/mdbx/dist/libmdbx.a
 	TEST_DB=mdbx $(GOTEST)
