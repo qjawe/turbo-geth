@@ -22,9 +22,14 @@ import (
 )
 
 var (
-	mdbxPutDirectTimer  = metrics.NewRegisteredTimer("mdbx/put/direct", nil)
-	mdbxPutRewriteTimer = metrics.NewRegisteredTimer("mdbx/put/rewrite", nil)
-	mdbxSeekExactTimer  = metrics.NewRegisteredTimer("mdbx/seek/exact", nil)
+	mdbxPutNoOverwriteTimer = metrics.NewRegisteredTimer("mdbx/put/no_overwrite", nil)
+	mdbxPutCurrentTimer     = metrics.NewRegisteredTimer("mdbx/put/direct", nil)
+	mdbxGetBothRangeTimer   = metrics.NewRegisteredTimer("mdbx/get/both_range", nil)
+	mdbxPutUpsertTimer      = metrics.NewRegisteredTimer("mdbx/put/upsert", nil)
+	mdbxPutCurrent2Timer    = metrics.NewRegisteredTimer("mdbx/put/current2", nil)
+	mdbxPutUpsert2Timer     = metrics.NewRegisteredTimer("mdbx/put/upsert2", nil)
+	mdbxDelCurrentTimer     = metrics.NewRegisteredTimer("mdbx/del/current", nil)
+	mdbxSeekExactTimer      = metrics.NewRegisteredTimer("mdbx/seek/exact", nil)
 	//mdbxFreeList        = metrics.NewRegisteredGauge("mdbx/feelist", nil)
 )
 
@@ -1177,40 +1182,69 @@ func (c *MdbxCursor) putDupSort(key []byte, value []byte) error {
 	}
 
 	if len(key) != from {
-		defer mdbxPutDirectTimer.UpdateSince(time.Now())
+		t := time.Now()
 		err := c.putNoOverwrite(key, value)
+		if c.bucketName == dbutils.PlainStateBucket {
+			mdbxPutNoOverwriteTimer.UpdateSince(t)
+		}
 		if err != nil {
 			if mdbx.IsKeyExists(err) {
-				return c.putCurrent(key, value)
+				t = time.Now()
+				err = c.putCurrent(key, value)
+				if c.bucketName == dbutils.PlainStateBucket {
+					mdbxPutCurrentTimer.UpdateSince(t)
+				}
+				return err
 			}
 			return err
 		}
 		return nil
 	}
 
-	defer mdbxPutRewriteTimer.UpdateSince(time.Now())
-
 	value = append(key[to:], value...)
 	key = key[:to]
+	t := time.Now()
 	_, v, err := c.getBothRange(key, value[:from-to])
+	if c.bucketName == dbutils.PlainStateBucket {
+		mdbxGetBothRangeTimer.UpdateSince(t)
+	}
 	if err != nil { // if key not found, or found another one - then just insert
 		if mdbx.IsNotFound(err) {
-			return c.put(key, value)
+			t = time.Now()
+			err = c.put(key, value)
+			if c.bucketName == dbutils.PlainStateBucket {
+				mdbxPutUpsertTimer.UpdateSince(t)
+			}
+			return err
 		}
 		return err
 	}
 
 	if bytes.Equal(v[:from-to], value[:from-to]) {
 		if len(v) == len(value) { // in DupSort case mdbx.Current works only with values of same length
-			return c.putCurrent(key, value)
+			t = time.Now()
+			err = c.putCurrent(key, value)
+			if c.bucketName == dbutils.PlainStateBucket {
+				mdbxPutCurrent2Timer.UpdateSince(t)
+			}
+			return err
 		}
+		t = time.Now()
 		err = c.delCurrent()
+		if c.bucketName == dbutils.PlainStateBucket {
+			mdbxDelCurrentTimer.UpdateSince(t)
+		}
 		if err != nil {
 			return err
 		}
 	}
 
-	return c.put(key, value)
+	t = time.Now()
+	err = c.put(key, value)
+	if c.bucketName == dbutils.PlainStateBucket {
+		mdbxPutUpsert2Timer.UpdateSince(t)
+	}
+	return err
 }
 
 func (c *MdbxCursor) PutCurrent(key []byte, value []byte) error {
@@ -1238,10 +1272,12 @@ func (c *MdbxCursor) SeekExact(key []byte) ([]byte, []byte, error) {
 			return []byte{}, nil, err
 		}
 	}
-	defer mdbxSeekExactTimer.UpdateSince(time.Now())
 
 	b := c.bucketCfg
 	if b.AutoDupSortKeysConversion && len(key) == b.DupFromLen {
+		if c.bucketName == dbutils.PlainStateBucket {
+			defer mdbxSeekExactTimer.UpdateSince(time.Now())
+		}
 		from, to := b.DupFromLen, b.DupToLen
 		k, v, err := c.getBothRange(key[:to], key[to:])
 		if err != nil {
