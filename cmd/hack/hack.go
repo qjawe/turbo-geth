@@ -2022,11 +2022,15 @@ func receiptSizes(chaindata string) error {
 		//bm.CloneCopyOnWriteContainers()
 		//bm.RunOptimize()
 		m2 := roaring.New()
-		//m2.Or(bm)
 		m2.AddRange(uint64(bm.Minimum()), uint64(bm.Maximum()+1))
 		m2.And(bm)
 		m2.RunOptimize()
-		fmt.Printf("m2: %d \n", m2.GetSerializedSizeInBytes())
+		fmt.Printf("And: %d \n", m2.GetSerializedSizeInBytes())
+
+		m3 := roaring.New()
+		m3.Or(bm)
+		m3.RunOptimize()
+		fmt.Printf("Arr: %d \n", m3.GetSerializedSizeInBytes())
 
 		return true, nil
 	})
