@@ -19,7 +19,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/RoaringBitmap/roaring"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/lmdb-go/lmdb"
 	"github.com/ledgerwatch/turbo-geth/common"
@@ -2012,15 +2011,19 @@ func receiptSizes(chaindata string) error {
 	}
 	defer tx.Rollback()
 
-	fmt.Printf("bucket: %s\n", dbutils.Log)
+	fmt.Printf("bucket: %s\n", dbutils.AccountsHistoryBucket)
 	c := tx.Cursor(dbutils.Log)
 	defer c.Close()
 	sizes := make(map[int]int)
+	keysTotal := 0
+	valuesTotal := 0
 	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 		if err != nil {
 			return err
 		}
 		sizes[len(v)]++
+		keysTotal += len(k)
+		valuesTotal += len(v)
 	}
 	var lens = make([]int, len(sizes))
 	i := 0
@@ -2030,11 +2033,12 @@ func receiptSizes(chaindata string) error {
 	}
 	sort.Ints(lens)
 	for _, l := range lens {
-		if sizes[l] < 100000 {
-			continue
-		}
+		//if sizes[l] < 100 {
+		//	continue
+		//}
 		fmt.Printf("%6d - %d\n", l, sizes[l])
 	}
+	fmt.Printf("keysTotal=%s, valuesTotal=%s\n", common.StorageSize(keysTotal), common.StorageSize(valuesTotal))
 	return nil
 }
 
