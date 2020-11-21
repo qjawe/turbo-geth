@@ -36,18 +36,17 @@ func CutLeft(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
 		return lft
 	}
 
-	lft := roaring.New()
 	from := uint64(bm.Minimum())
 	minMax := bm.Maximum() - bm.Minimum()             // +1 because AddRange has semantic [from,to)
 	to := sort.Search(int(minMax), func(i int) bool { // can be optimized to avoid "too small steps", but let's leave it for readability
-		lft.Clear()
+		lft := roaring.New() // bitmap.Clear() method intentionally not used here, because then serialized size of bitmap getting bigger
 		lft.AddRange(from, from+uint64(i)+1)
 		lft.And(bm)
 		lft.RunOptimize()
 		return lft.GetSerializedSizeInBytes() > sizeLimit
 	})
 
-	lft.Clear()
+	lft := roaring.New()
 	lft.AddRange(from, from+uint64(to)+1)
 	lft.And(bm)
 	bm.RemoveRange(from, from+uint64(to)+1)

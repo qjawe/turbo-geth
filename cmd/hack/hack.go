@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/lmdb-go/lmdb"
 	"github.com/ledgerwatch/turbo-geth/common"
@@ -2010,56 +2011,30 @@ func receiptSizes(chaindata string) error {
 		return err
 	}
 	defer tx.Rollback()
-	fmt.Printf("bucket: %s\n", dbutils.AccountsHistoryBucket)
-	c := tx.CursorDupFixed(dbutils.AccountsHistoryBucket)
-	defer c.Close()
-	for {
-		k, first, err := c.NextNoDup()
-		if err != nil {
-			panic(err)
-		}
-		if k == nil {
-			break
-		}
 
-		stride := len(first)
-		//fmt.Printf("%x\n", k)
-		for {
-			k, v, err := c.NextMulti()
-			if err != nil {
-				panic(err)
-			}
-			if k == nil {
-				break
-			}
-			multi := lmdb.WrapMulti(v, stride)
-			for i := 0; i < multi.Len(); i++ {
-				//fmt.Printf("	%x \n", multi.Val(i))
-			}
-		}
-	}
-	//
+	fmt.Printf("bucket: %s\n", dbutils.Log)
+	c := tx.Cursor(dbutils.Log)
+	defer c.Close()
 	sizes := make(map[int]int)
 	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 		if err != nil {
 			return err
 		}
-		fmt.Printf("1,%x, %x\n", k, v)
 		sizes[len(v)]++
 	}
-	//var lens = make([]int, len(sizes))
-	//i := 0
-	//for l := range sizes {
-	//	lens[i] = l
-	//	i++
-	//}
-	//sort.Ints(lens)
-	//for _, l := range lens {
-	//	if sizes[l] < 1 {
-	//		continue
-	//	}
-	//	fmt.Printf("%6d - %d\n", l, sizes[l])
-	//}
+	var lens = make([]int, len(sizes))
+	i := 0
+	for l := range sizes {
+		lens[i] = l
+		i++
+	}
+	sort.Ints(lens)
+	for _, l := range lens {
+		if sizes[l] < 100000 {
+			continue
+		}
+		fmt.Printf("%6d - %d\n", l, sizes[l])
+	}
 	return nil
 }
 
