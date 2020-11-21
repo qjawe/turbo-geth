@@ -2012,7 +2012,7 @@ func receiptSizes(chaindata string) error {
 	defer tx.Rollback()
 
 	fmt.Printf("bucket: %s\n", dbutils.AccountsHistoryBucket)
-	c := tx.Cursor(dbutils.Log)
+	c := tx.Cursor(dbutils.AccountsHistoryBucket)
 	defer c.Close()
 	sizes := make(map[int]int)
 	keysTotal := 0
