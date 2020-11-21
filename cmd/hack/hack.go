@@ -19,6 +19,7 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/RoaringBitmap/roaring"
 	"github.com/holiman/uint256"
 	"github.com/ledgerwatch/lmdb-go/lmdb"
 	"github.com/ledgerwatch/turbo-geth/common"
@@ -2010,6 +2011,25 @@ func receiptSizes(chaindata string) error {
 		return err
 	}
 	defer tx.Rollback()
+
+	db.Walk(dbutils.AccountsHistoryBucket, nil, 0, func(k, v []byte) (bool, error) {
+		if len(v) < 1920 {
+			return true, nil
+		}
+		bm := roaring.New()
+		bm.FromBuffer(v)
+		fmt.Printf("%x, %d %d %d\n", k, len(v), bm.GetCardinality(), bm.GetSerializedSizeInBytes())
+		//bm.CloneCopyOnWriteContainers()
+		//bm.RunOptimize()
+		m2 := roaring.New()
+		//m2.Or(bm)
+		m2.AddRange(uint64(bm.Minimum()), uint64(bm.Maximum()+1))
+		m2.And(bm)
+		m2.RunOptimize()
+		fmt.Printf("m2: %d \n", m2.GetSerializedSizeInBytes())
+
+		return true, nil
+	})
 
 	fmt.Printf("bucket: %s\n", dbutils.AccountsHistoryBucket)
 	c := tx.Cursor(dbutils.AccountsHistoryBucket)
