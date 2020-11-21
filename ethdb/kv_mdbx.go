@@ -31,7 +31,6 @@ var (
 	mdbxDelCurrentTimer     = metrics.NewRegisteredTimer("mdbx/del/current", nil)
 	mdbxSeekExactTimer      = metrics.NewRegisteredTimer("mdbx/seek/exact", nil)
 	mdbxSeekExact2Timer     = metrics.NewRegisteredTimer("mdbx/seek/exact2", nil)
-	//mdbxFreeList        = metrics.NewRegisteredGauge("mdbx/feelist", nil)
 )
 
 var _ DbCopier = &MdbxKV{}
@@ -490,6 +489,7 @@ func (tx *mdbxTx) CreateBucket(name string) error {
 		return err
 	}
 	cnfCopy.DBI = dbutils.DBI(dbi)
+
 	tx.db.buckets[name] = cnfCopy
 
 	return nil
@@ -554,6 +554,7 @@ func (tx *mdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 		txn.RawRead = true
 		tx.tx = txn
 	}
+
 	if err := tx.tx.Drop(mdbx.DBI(dbi), true); err != nil {
 		return err
 	}
@@ -564,7 +565,6 @@ func (tx *mdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 }
 
 func (tx *mdbxTx) ClearBucket(bucket string) error {
-	fmt.Printf("Dropping: %s\n", bucket)
 	if err := tx.dropEvenIfBucketIsNotDeprecated(bucket); err != nil {
 		return err
 	}
@@ -605,7 +605,7 @@ func (tx *mdbxTx) Commit(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if latency.Whole > 100*time.Millisecond {
+	if latency.Whole > 1*time.Second {
 		log.Info("Commit", "preparation", latency.Preparation, "gc", latency.GC, "audit", latency.Audit, "write", latency.Write, "fsync", latency.Sync, "ending", latency.Ending, "whole", latency.Whole)
 	}
 
@@ -1292,7 +1292,7 @@ func (c *MdbxCursor) SeekExact(key []byte) ([]byte, []byte, error) {
 	}
 
 	t := time.Now()
-	k, v, err := c.set(key)
+	_, v, err := c.set(key)
 	if c.bucketName == dbutils.PlainStateBucket {
 		mdbxSeekExact2Timer.UpdateSince(t)
 	}
@@ -1302,8 +1302,7 @@ func (c *MdbxCursor) SeekExact(key []byte) ([]byte, []byte, error) {
 		}
 		return []byte{}, nil, err
 	}
-	return k, v, nil
-
+	return []byte{}, v, nil
 }
 
 // Append - speedy feature of mdbx which is not part of KV interface.
@@ -1335,6 +1334,7 @@ func (c *MdbxCursor) Append(k []byte, v []byte) error {
 	if b.Flags&mdbx.DupSort != 0 {
 		return c.appendDup(k, v)
 	}
+
 	return c.append(k, v)
 }
 
