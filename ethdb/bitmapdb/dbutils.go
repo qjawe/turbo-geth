@@ -12,7 +12,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/ethdb"
 )
 
-const ChunkLimit = uint64(1900 * datasize.B) // threshold after which appear LMDB OverflowPages
+const ChunkLimit = uint64(1950 * datasize.B) // threshold after which appear LMDB OverflowPages = 4096 / 2 - (keySize + 8)
 
 func ChunkIterator(bm *roaring.Bitmap, target uint64) func() *roaring.Bitmap {
 	return func() *roaring.Bitmap {
@@ -31,13 +31,15 @@ func CutLeft(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
 	sz := bm.GetSerializedSizeInBytes()
 	if sz <= sizeLimit {
 		lft := roaring.New()
-		lft.Or(bm)
+		lft.AddRange(uint64(bm.Minimum()), uint64(bm.Maximum())+1)
+		lft.And(bm)
+		lft.RunOptimize()
 		bm.Clear()
 		return lft
 	}
 
 	from := uint64(bm.Minimum())
-	minMax := bm.Maximum() - bm.Minimum()             // +1 because AddRange has semantic [from,to)
+	minMax := bm.Maximum() - bm.Minimum()
 	to := sort.Search(int(minMax), func(i int) bool { // can be optimized to avoid "too small steps", but let's leave it for readability
 		lft := roaring.New() // bitmap.Clear() method intentionally not used here, because then serialized size of bitmap getting bigger
 		lft.AddRange(from, from+uint64(i)+1)
@@ -47,9 +49,9 @@ func CutLeft(bm *roaring.Bitmap, sizeLimit uint64) *roaring.Bitmap {
 	})
 
 	lft := roaring.New()
-	lft.AddRange(from, from+uint64(to)+1)
+	lft.AddRange(from, from+uint64(to)) // no +1 because sort.Search returns element which is just higher threshold - but we need lower
 	lft.And(bm)
-	bm.RemoveRange(from, from+uint64(to)+1)
+	bm.RemoveRange(from, from+uint64(to))
 	lft.RunOptimize()
 	return lft
 }

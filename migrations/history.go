@@ -14,7 +14,7 @@ import (
 )
 
 var historyAccBitmap = Migration{
-	Name: "history_account_bitmap_12",
+	Name: "history_account_bitmap_14",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
 		logEvery := time.NewTicker(30 * time.Second)
 		defer logEvery.Stop()
@@ -131,7 +131,7 @@ var historyAccBitmap = Migration{
 }
 
 var historyStorageBitmap = Migration{
-	Name: "history_storage_bitmap_12",
+	Name: "history_storage_bitmap_14",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, CommitProgress etl.LoadCommitHandler) (err error) {
 		logEvery := time.NewTicker(30 * time.Second)
 		defer logEvery.Stop()
