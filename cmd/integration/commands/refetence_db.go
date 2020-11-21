@@ -10,9 +10,11 @@ import (
 	"strings"
 	"time"
 
+	"github.com/ledgerwatch/lmdb-go/lmdb"
 	"github.com/ledgerwatch/turbo-geth/cmd/utils"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
+	"github.com/ledgerwatch/turbo-geth/ethdb/mdbx"
 	"github.com/ledgerwatch/turbo-geth/log"
 	"github.com/spf13/cobra"
 )
@@ -262,9 +264,7 @@ func fToMdbx(ctx context.Context, to string) error {
 
 	fileScanner := bufio.NewScanner(file)
 	c := dstTx.CursorDupSort(dbutils.CurrentStateBucket)
-	i := 0
 	for fileScanner.Scan() {
-		i++
 		kv := strings.Split(fileScanner.Text(), ",")
 		k, _ := hex.DecodeString(kv[0])
 		v, _ := hex.DecodeString(kv[1])
@@ -276,9 +276,6 @@ func fToMdbx(ctx context.Context, to string) error {
 			return ctx.Err()
 		}
 
-		if k[0] < uint8(50) {
-			continue
-		}
 		if err = c.AppendDup(k, v); err != nil {
 			return err
 		}
@@ -294,12 +291,11 @@ func fToMdbx(ctx context.Context, to string) error {
 
 	return nil
 }
-
 func toMdbx(ctx context.Context, from, to string) error {
 	_ = os.RemoveAll(to)
 
-	src := ethdb.NewLMDB().Path(from).MustOpen()
-	dst := ethdb.NewMDBX().Path(to).MustOpen()
+	src := ethdb.NewLMDB().Path(from).Flags(lmdb.Readonly).MustOpen()
+	dst := ethdb.NewMDBX().Path(to).Flags(mdbx.WriteMap | mdbx.UtterlyNoSync | mdbx.NoMemInit).MustOpen()
 	srcTx, err1 := src.Begin(ctx, nil, ethdb.RO)
 	if err1 != nil {
 		return err1
@@ -316,7 +312,7 @@ func toMdbx(ctx context.Context, from, to string) error {
 	logEvery := time.NewTicker(15 * time.Second)
 	defer logEvery.Stop()
 
-	commitEvery := time.NewTicker(5 * time.Minute)
+	commitEvery := time.NewTicker(30 * time.Second)
 	defer commitEvery.Stop()
 
 	for name, b := range dbutils.BucketsConfigs {
