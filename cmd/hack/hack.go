@@ -2030,8 +2030,16 @@ func receiptSizes(chaindata string) error {
 		m3 := roaring.New()
 		m3.Or(bm)
 		m3.RunOptimize()
-		fmt.Printf("Arr: %d \n", m3.GetSerializedSizeInBytes())
+		if m2.GetSerializedSizeInBytes() > m3.GetSerializedSizeInBytes() {
+			fmt.Printf("Arr: %d \n", m3.GetSerializedSizeInBytes())
+		}
 
+		m4 := roaring.New()
+		m4.Or(m2)
+		m4.RunOptimize()
+		if m2.GetSerializedSizeInBytes() > m4.GetSerializedSizeInBytes() {
+			fmt.Printf("m4: %d \n", m4.GetSerializedSizeInBytes())
+		}
 		return true, nil
 	})
 
