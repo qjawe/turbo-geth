@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>. */
 
 #define MDBX_ALLOY 1
-#define MDBX_BUILD_SOURCERY a3f54dff1606a90c066286c89f6b2a810ab4830f5821eceeb2dcfd2016bf6491_v0_9_1_126_g862cfb9
+#define MDBX_BUILD_SOURCERY 7fb62b9ea3b7a16a523a861bb0c0eea52baa9cd0b2437b1964dfa5696dea557e_v0_9_1_131_gf76bf72
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -1542,7 +1542,7 @@ extern LIBMDBX_API const char *const mdbx_sourcery_anchor;
 
 /** Enables support for huge write-transactions */
 #ifndef MDBX_HUGE_TRANSACTIONS
-#define MDBX_HUGE_TRANSACTIONS 1
+#define MDBX_HUGE_TRANSACTIONS 0
 #endif /* MDBX_HUGE_TRANSACTIONS */
 
 /** Using fcntl(F_FULLFSYNC) with 5-10 times slowdown */
@@ -7778,18 +7778,18 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
 
   const size_t limit_bytes = pgno_align2os_bytes(env, limit_pgno);
   const size_t size_bytes = pgno_align2os_bytes(env, size_pgno);
+  const size_t prev_size = env->me_dxb_mmap.current;
+  const size_t prev_limit = env->me_dxb_mmap.limit;
+  const void *const prev_addr = env->me_map;
 
   mdbx_verbose("resize datafile/mapping: "
                "present %" PRIuPTR " -> %" PRIuPTR ", "
                "limit %" PRIuPTR " -> %" PRIuPTR,
-               env->me_dxb_mmap.current, size_bytes, env->me_dxb_mmap.limit,
-               limit_bytes);
+               prev_size, size_bytes, prev_limit, limit_bytes);
 
   mdbx_assert(env, limit_bytes >= size_bytes);
   mdbx_assert(env, bytes2pgno(env, size_bytes) >= size_pgno);
   mdbx_assert(env, bytes2pgno(env, limit_bytes) >= limit_pgno);
-  const size_t prev_limit = env->me_dxb_mmap.limit;
-  const void *const prev_addr = env->me_map;
 
 #if defined(_WIN32) || defined(_WIN64)
   /* Acquire guard in exclusive mode for:
@@ -7856,7 +7856,6 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
 
 #endif /* ! Windows */
 
-  const size_t prev_size = env->me_dxb_mmap.current;
   if (size_bytes < prev_size) {
     mdbx_notice("resize-MADV_%s %u..%u",
                 (env->me_flags & MDBX_WRITEMAP) ? "REMOVE" : "DONTNEED",
@@ -7939,14 +7938,12 @@ bailout:
       mdbx_error("failed resize datafile/mapping: "
                  "present %" PRIuPTR " -> %" PRIuPTR ", "
                  "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
-                 env->me_dxb_mmap.current, size_bytes, env->me_dxb_mmap.limit,
-                 limit_bytes, rc);
+                 prev_size, size_bytes, prev_limit, limit_bytes, rc);
     } else {
       mdbx_warning("unable resize datafile/mapping: "
                    "present %" PRIuPTR " -> %" PRIuPTR ", "
                    "limit %" PRIuPTR " -> %" PRIuPTR ", errcode %d",
-                   env->me_dxb_mmap.current, size_bytes, env->me_dxb_mmap.limit,
-                   limit_bytes, rc);
+                   prev_size, size_bytes, prev_limit, limit_bytes, rc);
     }
     if (!env->me_dxb_mmap.address) {
       env->me_flags |= MDBX_FATAL_ERROR;
@@ -9970,11 +9967,12 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       mdbx_txn_unlock(env);
     } else {
       mdbx_assert(env, txn->mt_parent != NULL);
+      MDBX_txn *const parent = txn->mt_parent;
+      mdbx_assert(env, parent->mt_signature == MDBX_MT_SIGNATURE);
+      mdbx_assert(env, parent->mt_child == txn &&
+                           (parent->mt_flags & MDBX_TXN_HAS_CHILD) != 0);
       mdbx_assert(env, mdbx_pnl_check4assert(txn->tw.reclaimed_pglist,
                                              txn->mt_next_pgno));
-      MDBX_txn *const parent = txn->mt_parent;
-      env->me_txn->mt_child = NULL;
-      env->me_txn->mt_flags &= ~MDBX_TXN_HAS_CHILD;
       mdbx_pnl_free(txn->tw.reclaimed_pglist);
       mdbx_pnl_free(txn->tw.spill_pages);
 
@@ -9995,6 +9993,8 @@ static int mdbx_txn_end(MDBX_txn *txn, unsigned mode) {
       }
 
       mdbx_free(txn->tw.dirtylist);
+      parent->mt_child = NULL;
+      parent->mt_flags &= ~MDBX_TXN_HAS_CHILD;
 
       if (parent->mt_geo.upper != txn->mt_geo.upper ||
           parent->mt_geo.now != txn->mt_geo.now) {
@@ -11146,11 +11146,16 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
   }
 
   if (txn->mt_parent) {
+    mdbx_assert(env, txn != env->me_txn0);
     MDBX_txn *const parent = txn->mt_parent;
-    mdbx_tassert(txn, mdbx_dirtylist_check(txn));
+    mdbx_assert(env, parent->mt_signature == MDBX_MT_SIGNATURE);
+    mdbx_assert(env, parent->mt_child == txn &&
+                         (parent->mt_flags & MDBX_TXN_HAS_CHILD) != 0);
+    mdbx_assert(env, mdbx_dirtylist_check(txn));
 
     if (txn->tw.dirtylist->length == 0 &&
-        (txn->mt_flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0) {
+        (txn->mt_flags & (MDBX_TXN_DIRTY | MDBX_TXN_SPILLS)) == 0 &&
+        parent->mt_numdbs == txn->mt_numdbs) {
       for (int i = txn->mt_numdbs; --i >= 0;) {
         mdbx_tassert(txn, (txn->mt_dbistate[i] & DBI_DIRTY) == 0);
         if ((txn->mt_dbistate[i] & DBI_STALE) &&
@@ -11163,7 +11168,6 @@ int mdbx_txn_commit_ex(MDBX_txn *txn, MDBX_commit_latency *latency) {
                                sizeof(parent->mt_geo)) == 0);
       mdbx_tassert(txn, memcmp(&parent->mt_canary, &txn->mt_canary,
                                sizeof(parent->mt_canary)) == 0);
-      mdbx_tassert(txn, parent->mt_numdbs == txn->mt_numdbs);
 
       end_mode = MDBX_END_ABORT | MDBX_END_SLOT | MDBX_END_FREE;
       goto done;
@@ -19344,7 +19348,6 @@ int mdbx_put(MDBX_txn *txn, MDBX_dbi dbi, const MDBX_val *key, MDBX_val *data,
 #ifndef MDBX_WBUF
 #define MDBX_WBUF ((size_t)1024 * 1024)
 #endif
-#define MDBX_EOF 0x10 /* mdbx_env_copythr() is done reading */
 
 /* State needed for a double-buffering compacting copy. */
 typedef struct mdbx_copy {
@@ -19356,19 +19359,17 @@ typedef struct mdbx_copy {
   size_t mc_wlen[2];
   size_t mc_olen[2];
   mdbx_filehandle_t mc_fd;
-  volatile int mc_error;
-  pgno_t mc_next_pgno;
-  short mc_toggle; /* Buffer number in provider */
-  short mc_new;    /* (0-2 buffers to write) | (MDBX_EOF at end) */
   /* Error code.  Never cleared if set.  Both threads can set nonzero
    * to fail the copy.  Not mutex-protected, MDBX expects atomic int. */
+  volatile int mc_error;
+  pgno_t mc_next_pgno;
+  volatile unsigned mc_head;
+  volatile unsigned mc_tail;
 } mdbx_copy;
 
 /* Dedicated writer thread for compacting copy. */
 static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
   mdbx_copy *my = arg;
-  uint8_t *ptr;
-  int toggle = 0;
 
 #if defined(EPIPE) && !(defined(_WIN32) || defined(_WIN64))
   sigset_t sigset;
@@ -19379,19 +19380,23 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
 
   mdbx_condpair_lock(&my->mc_condpair);
   while (!my->mc_error) {
-    while (!my->mc_new && !my->mc_error) {
+    while (my->mc_tail == my->mc_head && !my->mc_error) {
       int err = mdbx_condpair_wait(&my->mc_condpair, true);
       if (err != MDBX_SUCCESS) {
         my->mc_error = err;
         goto bailout;
       }
     }
-    if (my->mc_new == 0 + MDBX_EOF) /* 0 buffers, just EOF */
-      break;
+    const unsigned toggle = my->mc_tail & 1;
     size_t wsize = my->mc_wlen[toggle];
-    ptr = my->mc_wbuf[toggle];
+    if (wsize == 0) {
+      my->mc_tail += 1;
+      break /* EOF */;
+    }
+    my->mc_wlen[toggle] = 0;
+    uint8_t *ptr = my->mc_wbuf[toggle];
   again:
-    if (wsize > 0 && !my->mc_error) {
+    if (!my->mc_error) {
       int err = mdbx_write(my->mc_fd, ptr, wsize);
       if (err != MDBX_SUCCESS) {
 #if defined(EPIPE) && !(defined(_WIN32) || defined(_WIN64))
@@ -19408,16 +19413,13 @@ static THREAD_RESULT __cold THREAD_CALL mdbx_env_copythr(void *arg) {
     }
 
     /* If there's an overflow page tail, write it too */
-    if (my->mc_olen[toggle]) {
-      wsize = my->mc_olen[toggle];
-      ptr = my->mc_over[toggle];
+    wsize = my->mc_olen[toggle];
+    if (wsize) {
       my->mc_olen[toggle] = 0;
+      ptr = my->mc_over[toggle];
       goto again;
     }
-    my->mc_wlen[toggle] = 0;
-    toggle ^= 1;
-    /* Return the empty buffer to provider */
-    my->mc_new--;
+    my->mc_tail += 1;
     mdbx_condpair_signal(&my->mc_condpair, false);
   }
 bailout:
@@ -19425,24 +19427,19 @@ bailout:
   return (THREAD_RESULT)0;
 }
 
-/* Give buffer and/or MDBX_EOF to writer thread, await unused buffer.
- *
- * [in] my control structure.
- * [in] adjust (1 to hand off 1 buffer) | (MDBX_EOF when ending). */
-static __cold int mdbx_env_cthr_toggle(mdbx_copy *my, int adjust) {
+/* Give buffer and/or MDBX_EOF to writer thread, await unused buffer. */
+static __cold int mdbx_env_cthr_toggle(mdbx_copy *my) {
   mdbx_condpair_lock(&my->mc_condpair);
-  my->mc_new += (short)adjust;
+  mdbx_assert(my->mc_env, my->mc_head - my->mc_tail < 2 || my->mc_error);
+  my->mc_head += 1;
   mdbx_condpair_signal(&my->mc_condpair, true);
-  while (!my->mc_error && (my->mc_new & 2) /* both buffers in use */) {
+  while (!my->mc_error &&
+         my->mc_head - my->mc_tail == 2 /* both buffers in use */) {
     int err = mdbx_condpair_wait(&my->mc_condpair, false);
     if (err != MDBX_SUCCESS)
       my->mc_error = err;
   }
   mdbx_condpair_unlock(&my->mc_condpair);
-
-  my->mc_toggle ^= (adjust & 1);
-  /* Both threads reset mc_wlen, to be safe from threading errors */
-  my->mc_wlen[my->mc_toggle] = 0;
   return my->mc_error;
 }
 
@@ -19454,7 +19451,7 @@ static __cold int mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
   MDBX_cursor_couple couple;
   MDBX_page *mo, *mp, *leaf;
   char *buf, *ptr;
-  int rc, toggle;
+  int rc;
   unsigned i;
 
   /* Empty DB, nothing to do */
@@ -19490,11 +19487,9 @@ static __cold int mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
   /* This is writable space for a leaf page. Usually not needed. */
   leaf = (MDBX_page *)ptr;
 
-  toggle = my->mc_toggle;
   while (couple.outer.mc_snum > 0) {
-    unsigned n;
     mp = couple.outer.mc_pg[couple.outer.mc_top];
-    n = page_numkeys(mp);
+    unsigned n = page_numkeys(mp);
 
     if (IS_LEAF(mp)) {
       if (!IS_LEAF2(mp) && !(flags & F_DUPDATA)) {
@@ -19517,11 +19512,12 @@ static __cold int mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
                                pp_txnid4chk(mp, my->mc_txn));
             if (unlikely(rc != MDBX_SUCCESS))
               goto done;
-            if (my->mc_wlen[toggle] >= MDBX_WBUF) {
-              rc = mdbx_env_cthr_toggle(my, 1);
+            unsigned toggle = my->mc_head & 1;
+            if (my->mc_wlen[toggle] + my->mc_env->me_psize > MDBX_WBUF) {
+              rc = mdbx_env_cthr_toggle(my);
               if (unlikely(rc != MDBX_SUCCESS))
                 goto done;
-              toggle = my->mc_toggle;
+              toggle = my->mc_head & 1;
             }
             mo = (MDBX_page *)(my->mc_wbuf[toggle] + my->mc_wlen[toggle]);
             memcpy(mo, omp, my->mc_env->me_psize);
@@ -19531,10 +19527,10 @@ static __cold int mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
             if (omp->mp_pages > 1) {
               my->mc_olen[toggle] = pgno2bytes(my->mc_env, omp->mp_pages - 1);
               my->mc_over[toggle] = (uint8_t *)omp + my->mc_env->me_psize;
-              rc = mdbx_env_cthr_toggle(my, 1);
+              rc = mdbx_env_cthr_toggle(my);
               if (unlikely(rc != MDBX_SUCCESS))
                 goto done;
-              toggle = my->mc_toggle;
+              toggle = my->mc_head & 1;
             }
           } else if (node_flags(node) & F_SUBDATA) {
             if (node_ds(node) != sizeof(MDBX_db)) {
@@ -19552,11 +19548,9 @@ static __cold int mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
 
             MDBX_db db;
             memcpy(&db, node_data(node), sizeof(MDBX_db));
-            my->mc_toggle = (short)toggle;
             rc = mdbx_env_cwalk(my, &db.md_root, node_flags(node) & F_DUPDATA);
             if (rc)
               goto done;
-            toggle = my->mc_toggle;
             memcpy(node_data(node), &db, sizeof(MDBX_db));
           }
         }
@@ -19585,11 +19579,12 @@ static __cold int mdbx_env_cwalk(mdbx_copy *my, pgno_t *pg, int flags) {
         continue;
       }
     }
-    if (my->mc_wlen[toggle] >= MDBX_WBUF) {
-      rc = mdbx_env_cthr_toggle(my, 1);
+    unsigned toggle = my->mc_head & 1;
+    if (my->mc_wlen[toggle] + my->mc_wlen[toggle] > MDBX_WBUF) {
+      rc = mdbx_env_cthr_toggle(my);
       if (unlikely(rc != MDBX_SUCCESS))
         goto done;
-      toggle = my->mc_toggle;
+      toggle = my->mc_head & 1;
     }
     mo = (MDBX_page *)(my->mc_wbuf[toggle] + my->mc_wlen[toggle]);
     mdbx_page_copy(mo, mp, my->mc_env->me_psize);
@@ -19726,8 +19721,12 @@ static __cold int mdbx_env_compact(MDBX_env *env, MDBX_txn *read_txn,
       }
       if (rc == MDBX_SUCCESS)
         rc = mdbx_env_cwalk(&ctx, &root, 0);
-      mdbx_env_cthr_toggle(&ctx, 1 | MDBX_EOF);
+      mdbx_env_cthr_toggle(&ctx);
+      mdbx_env_cthr_toggle(&ctx);
       thread_err = mdbx_thread_join(thread);
+      mdbx_assert(env, (ctx.mc_tail == ctx.mc_head &&
+                        ctx.mc_wlen[ctx.mc_head & 1] == 0) ||
+                           ctx.mc_error);
       mdbx_condpair_destroy(&ctx.mc_condpair);
     }
     if (unlikely(thread_err != MDBX_SUCCESS))
@@ -24573,6 +24572,7 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
     return err;
   }
 
+retry_file_and_section:
   /* resizing of the file may take a while,
    * therefore we reserve address space to avoid occupy it by other threads */
   ReservedAddress = map->address;
@@ -24588,7 +24588,6 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
       map->address = NULL;
   }
 
-retry_file_and_section:
   err = mdbx_filesize(map->fd, &map->filesize);
   if (err != MDBX_SUCCESS)
     goto bailout;
@@ -24655,7 +24654,7 @@ retry_mapview:;
        * but will return MDBX_UNABLE_EXTEND_MAPSIZE on success */
       rc = MDBX_UNABLE_EXTEND_MAPSIZE;
       size = map->current;
-      limit = map->limit;
+      ReservedSize = limit = map->limit;
       goto retry_file_and_section;
     }
 
@@ -25398,9 +25397,9 @@ __dll_export
         0,
         9,
         1,
-        126,
-        {"2020-11-18T22:38:26+03:00", "782d8ab685e30ef91126641b30fa32e8386deb8f", "862cfb9a3b5b1f1a7fafa0494663ec4a5d972e75",
-         "v0.9.1-126-g862cfb9"},
+        131,
+        {"2020-11-20T11:52:44+03:00", "5bab85712c2a208b2bf3cc6a4643f9b4a1f375d0", "f76bf7202146022baed0fd5f4e8da60d5e24846c",
+         "v0.9.1-131-gf76bf72"},
         sourcery};
 
 __dll_export

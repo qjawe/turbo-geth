@@ -23,18 +23,19 @@ import (
 var _ DbCopier = &LmdbKV{}
 
 var (
-	lmdbPutDirectTimer  = metrics.NewRegisteredTimer("lmdb/put/direct", nil)
-	lmdbPutRewriteTimer = metrics.NewRegisteredTimer("lmdb/put/rewrite", nil)
-	lmdbSeekExactTimer  = metrics.NewRegisteredTimer("lmdb/seek/exact", nil)
+	lmdbPutNoOverwriteTimer = metrics.NewRegisteredTimer("lmdb/put/no_overwrite", nil)
+	lmdbPutCurrentTimer     = metrics.NewRegisteredTimer("lmdb/put/direct", nil)
+	lmdbGetBothRangeTimer   = metrics.NewRegisteredTimer("lmdb/get/both_range", nil)
+	lmdbPutUpsertTimer      = metrics.NewRegisteredTimer("lmdb/put/upsert", nil)
+	lmdbPutCurrent2Timer    = metrics.NewRegisteredTimer("lmdb/put/current2", nil)
+	lmdbPutUpsert2Timer     = metrics.NewRegisteredTimer("lmdb/put/upsert2", nil)
+	lmdbDelCurrentTimer     = metrics.NewRegisteredTimer("lmdb/del/current", nil)
+	lmdbSeekExactTimer      = metrics.NewRegisteredTimer("lmdb/seek/exact", nil)
+	lmdbSeekExact2Timer     = metrics.NewRegisteredTimer("lmdb/seek/exact2", nil)
 )
 
 const (
 	NonExistingDBI dbutils.DBI = 999_999_999
-)
-
-const (
-	TxRO = 1
-	TxRW
 )
 
 var (
@@ -45,7 +46,7 @@ var (
 type BucketConfigsFunc func(defaultBuckets dbutils.BucketsCfg) dbutils.BucketsCfg
 type LmdbOpts struct {
 	inMem            bool
-	readOnly         bool
+	flags            uint
 	path             string
 	exclusive        bool
 	bucketsCfg       BucketConfigsFunc
@@ -77,8 +78,8 @@ func (opts LmdbOpts) MaxFreelistReuse(pages uint) LmdbOpts {
 	return opts
 }
 
-func (opts LmdbOpts) ReadOnly() LmdbOpts {
-	opts.readOnly = true
+func (opts LmdbOpts) Flags(flags uint) LmdbOpts {
+	opts.flags = flags
 	return opts
 }
 
@@ -135,20 +136,17 @@ func (opts LmdbOpts) Open() (kv KV, err error) {
 		return nil, err
 	}
 
-	if !opts.readOnly {
+	if opts.flags&lmdb.Readonly == 0 {
 		if err = os.MkdirAll(opts.path, 0744); err != nil {
 			return nil, fmt.Errorf("could not create dir: %s, %w", opts.path, err)
 		}
 	}
 
-	var flags uint = lmdb.NoReadahead
-	if opts.readOnly {
-		flags |= lmdb.Readonly
-	}
+	var flags uint = opts.flags | lmdb.NoReadahead
 	if opts.inMem {
 		flags |= lmdb.NoMetaSync
 	}
-	flags |= lmdb.NoSync
+	flags |= lmdb.NoSync // do call .Sync manually after commit
 
 	var exclusiveLock fileutil.Releaser
 	if opts.exclusive {
@@ -189,7 +187,7 @@ func (opts LmdbOpts) Open() (kv KV, err error) {
 	}
 
 	// Open or create buckets
-	if opts.readOnly {
+	if opts.flags&lmdb.Readonly != 0 {
 		tx, innerErr := db.Begin(context.Background(), nil, RO)
 		if innerErr != nil {
 			return nil, innerErr
@@ -472,7 +470,7 @@ func (db *LmdbKV) Update(ctx context.Context, f func(tx Tx) error) (err error) {
 func (tx *lmdbTx) CreateBucket(name string) error {
 	var flags = tx.db.buckets[name].Flags
 	var nativeFlags uint
-	if !tx.db.opts.readOnly {
+	if tx.db.opts.flags&lmdb.Readonly == 0 {
 		nativeFlags |= lmdb.Create
 	}
 	switch flags {
@@ -599,7 +597,7 @@ func (tx *lmdbTx) Commit(ctx context.Context) error {
 		log.Info("Batch", "commit", commitTook)
 	}
 
-	if !tx.isSubTx && !tx.db.opts.readOnly && !tx.db.opts.inMem && tx.flags&NoSync == 0 { // call fsync only after main transaction commit
+	if !tx.isSubTx && tx.db.opts.flags&lmdb.Readonly == 0 && !tx.db.opts.inMem && tx.flags&NoSync == 0 { // call fsync only after main transaction commit
 		fsyncTimer := time.Now()
 		if err := tx.db.env.Sync(false); err != nil {
 			log.Warn("fsync after commit failed", "err", err)
@@ -1208,41 +1206,69 @@ func (c *LmdbCursor) putDupSort(key []byte, value []byte) error {
 	}
 
 	if len(key) != from {
-		defer lmdbPutDirectTimer.UpdateSince(time.Now())
-
+		t := time.Now()
 		err := c.putNoOverwrite(key, value)
+		if c.bucketName == dbutils.PlainStateBucket {
+			lmdbPutNoOverwriteTimer.UpdateSince(t)
+		}
 		if err != nil {
 			if lmdb.IsKeyExists(err) {
-				return c.putCurrent(key, value)
+				t = time.Now()
+				err = c.putCurrent(key, value)
+				if c.bucketName == dbutils.PlainStateBucket {
+					lmdbPutCurrentTimer.UpdateSince(t)
+				}
+				return err
 			}
 			return err
 		}
 		return nil
 	}
 
-	defer lmdbPutRewriteTimer.UpdateSince(time.Now())
-
 	value = append(key[to:], value...)
 	key = key[:to]
+	t := time.Now()
 	_, v, err := c.getBothRange(key, value[:from-to])
+	if c.bucketName == dbutils.PlainStateBucket {
+		lmdbGetBothRangeTimer.UpdateSince(t)
+	}
 	if err != nil { // if key not found, or found another one - then just insert
 		if lmdb.IsNotFound(err) {
-			return c.put(key, value)
+			t = time.Now()
+			err = c.put(key, value)
+			if c.bucketName == dbutils.PlainStateBucket {
+				lmdbPutUpsertTimer.UpdateSince(t)
+			}
+			return err
 		}
 		return err
 	}
 
 	if bytes.Equal(v[:from-to], value[:from-to]) {
 		if len(v) == len(value) { // in DupSort case lmdb.Current works only with values of same length
-			return c.putCurrent(key, value)
+			t = time.Now()
+			err = c.putCurrent(key, value)
+			if c.bucketName == dbutils.PlainStateBucket {
+				lmdbPutCurrent2Timer.UpdateSince(t)
+			}
+			return err
 		}
+		t = time.Now()
 		err = c.delCurrent()
+		if c.bucketName == dbutils.PlainStateBucket {
+			lmdbDelCurrentTimer.UpdateSince(t)
+		}
 		if err != nil {
 			return err
 		}
 	}
 
-	return c.put(key, value)
+	t = time.Now()
+	err = c.put(key, value)
+	if c.bucketName == dbutils.PlainStateBucket {
+		lmdbPutUpsert2Timer.UpdateSince(t)
+	}
+	return err
 }
 
 func (c *LmdbCursor) PutCurrent(key []byte, value []byte) error {
@@ -1270,12 +1296,15 @@ func (c *LmdbCursor) SeekExact(key []byte) ([]byte, []byte, error) {
 			return []byte{}, nil, err
 		}
 	}
-	defer lmdbSeekExactTimer.UpdateSince(time.Now())
 
 	b := c.bucketCfg
 	if b.AutoDupSortKeysConversion && len(key) == b.DupFromLen {
 		from, to := b.DupFromLen, b.DupToLen
+		t := time.Now()
 		k, v, err := c.getBothRange(key[:to], key[to:])
+		if c.bucketName == dbutils.PlainStateBucket {
+			lmdbSeekExactTimer.UpdateSince(t)
+		}
 		if err != nil {
 			if lmdb.IsNotFound(err) {
 				return nil, nil, nil
@@ -1288,7 +1317,11 @@ func (c *LmdbCursor) SeekExact(key []byte) ([]byte, []byte, error) {
 		return k, v[from-to:], nil
 	}
 
+	t := time.Now()
 	k, v, err := c.set(key)
+	if c.bucketName == dbutils.PlainStateBucket {
+		lmdbSeekExact2Timer.UpdateSince(t)
+	}
 	if err != nil {
 		if lmdb.IsNotFound(err) {
 			return nil, nil, nil
