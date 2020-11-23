@@ -46,13 +46,19 @@ var (
 type BucketConfigsFunc func(defaultBuckets dbutils.BucketsCfg) dbutils.BucketsCfg
 type LmdbOpts struct {
 	inMem            bool
-	readAhead        bool // NO_READAHEAD flag is set by default because our DB >> RAM
 	flags            uint
 	path             string
 	exclusive        bool
 	bucketsCfg       BucketConfigsFunc
 	mapSize          datasize.ByteSize
 	maxFreelistReuse uint
+}
+
+func NewLMDB() LmdbOpts {
+	return LmdbOpts{
+		bucketsCfg: DefaultBucketConfigs,
+		flags:      lmdb.NoReadahead | lmdb.NoSync, // do call .Sync manually after commit to measure speed of commit and speed of fsync individually
+	}
 }
 
 func (opts LmdbOpts) Path(path string) LmdbOpts {
@@ -69,11 +75,6 @@ func (opts LmdbOpts) InMem() LmdbOpts {
 	return opts
 }
 
-func (opts LmdbOpts) ReadAhead() LmdbOpts {
-	opts.readAhead = true
-	return opts
-}
-
 func (opts LmdbOpts) MapSize(sz datasize.ByteSize) LmdbOpts {
 	opts.mapSize = sz
 	return opts
@@ -84,8 +85,8 @@ func (opts LmdbOpts) MaxFreelistReuse(pages uint) LmdbOpts {
 	return opts
 }
 
-func (opts LmdbOpts) Flags(flags uint) LmdbOpts {
-	opts.flags = flags
+func (opts LmdbOpts) Flags(f func(uint) uint) LmdbOpts {
+	opts.flags = f(opts.flags)
 	return opts
 }
 
@@ -149,13 +150,9 @@ func (opts LmdbOpts) Open() (kv KV, err error) {
 	}
 
 	var flags = opts.flags
-	if !opts.readAhead {
-		flags |= lmdb.NoReadahead
-	}
 	if opts.inMem {
 		flags |= lmdb.NoMetaSync
 	}
-	flags |= lmdb.NoSync // do call .Sync manually after commit
 
 	var exclusiveLock fileutil.Releaser
 	if opts.exclusive {
@@ -290,9 +287,6 @@ type LmdbKV struct {
 	exclusiveLock fileutil.Releaser
 }
 
-func NewLMDB() LmdbOpts {
-	return LmdbOpts{bucketsCfg: DefaultBucketConfigs}
-}
 func (db *LmdbKV) NewDbWithTheSameParameters() *ObjectDatabase {
 	opts := db.opts
 	return NewObjectDatabase(NewLMDB().Set(opts).MustOpen())

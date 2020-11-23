@@ -37,13 +37,19 @@ var _ DbCopier = &MdbxKV{}
 
 type MdbxOpts struct {
 	inMem            bool
-	readAhead        bool // NO_READAHEAD flag is set by default because our DB >> RAM
 	exclusive        bool
 	flags            uint
 	path             string
 	bucketsCfg       BucketConfigsFunc
 	mapSize          datasize.ByteSize
 	maxFreelistReuse uint
+}
+
+func NewMDBX() MdbxOpts {
+	return MdbxOpts{
+		bucketsCfg: DefaultBucketConfigs,
+		flags:      mdbx.NoReadahead | mdbx.Coalesce, // | mdbx.LifoReclaim
+	}
 }
 
 func (opts MdbxOpts) Path(path string) MdbxOpts {
@@ -60,18 +66,13 @@ func (opts MdbxOpts) InMem() MdbxOpts {
 	return opts
 }
 
-func (opts MdbxOpts) ReadAhead() MdbxOpts {
-	opts.readAhead = true
-	return opts
-}
-
 func (opts MdbxOpts) Exclusive() MdbxOpts {
 	opts.exclusive = true
 	return opts
 }
 
-func (opts MdbxOpts) Flags(flags uint) MdbxOpts {
-	opts.flags = flags
+func (opts MdbxOpts) Flags(f func(uint) uint) MdbxOpts {
+	opts.flags = f(opts.flags)
 	return opts
 }
 
@@ -135,20 +136,12 @@ func (opts MdbxOpts) Open() (KV, error) {
 	}
 
 	var flags = opts.flags
-	if !opts.readAhead {
-		flags |= mdbx.NoReadahead
-	}
 	if opts.inMem {
 		flags |= mdbx.NoMetaSync | mdbx.SafeNoSync
 	} else {
 		flags |= mdbx.Durable
 	}
-	if opts.exclusive {
-		flags |= mdbx.Exclusive
-	}
 
-	//flags |= mdbx.LifoReclaim
-	flags |= mdbx.Coalesce
 	err = env.Open(opts.path, flags, 0664)
 	if err != nil {
 		return nil, fmt.Errorf("%w, path: %s", err, opts.path)
@@ -256,10 +249,6 @@ type MdbxKV struct {
 	log     log.Logger
 	buckets dbutils.BucketsCfg
 	wg      *sync.WaitGroup
-}
-
-func NewMDBX() MdbxOpts {
-	return MdbxOpts{bucketsCfg: DefaultBucketConfigs}
 }
 
 // Close closes db
