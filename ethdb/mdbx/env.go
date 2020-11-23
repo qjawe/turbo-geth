@@ -32,7 +32,6 @@ const (
 	Readonly   = C.MDBX_RDONLY     // Used in several functions to denote an object as readonly.
 	WriteMap   = C.MDBX_WRITEMAP   // Use a writable memory map.
 	NoMetaSync = C.MDBX_NOMETASYNC // Don't fsync metapage after commit.
-	//NoSync      = C.MDBX_NOSYNC     // Don't fsync after commit.
 	SafeNoSync = C.MDBX_SAFE_NOSYNC
 	Durable    = C.MDBX_SYNC_DURABLE
 	NoTLS      = C.MDBX_NOTLS // Danger zone. When unset reader locktable slots are tied to their thread.
