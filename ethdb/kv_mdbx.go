@@ -1174,10 +1174,16 @@ func (c *MdbxCursor) Put(key []byte, value []byte) error {
 
 	b := c.bucketCfg
 	if b.AutoDupSortKeysConversion {
-		return c.putDupSort(key, value)
+		if err := c.putDupSort(key, value); err != nil {
+			return fmt.Errorf("%w, k=%x, v=%x", err, key, value)
+		}
+		return nil
 	}
 
-	return c.put(key, value)
+	if err := c.put(key, value); err != nil {
+		return fmt.Errorf("%w, k=%x, v=%x", err, key, value)
+	}
+	return nil
 }
 
 func (c *MdbxCursor) putDupSort(key []byte, value []byte) error {

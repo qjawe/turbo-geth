@@ -189,7 +189,7 @@ func (m *Migrator) Apply(db ethdb.Database, tmpdir string) error {
 				if key != nil {
 					err = tx.Put(dbutils.Migrations, []byte("_progress_"+v.Name), key)
 					if err != nil {
-						return err
+						return fmt.Errorf("%w, k=%x, v=%x", err, []byte("_progress_"+v.Name), key)
 					}
 				}
 				// do commit, but don't save partial progress
