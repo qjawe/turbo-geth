@@ -294,7 +294,7 @@ func fToMdbx(ctx context.Context, to string) error {
 func toMdbx(ctx context.Context, from, to string) error {
 	_ = os.RemoveAll(to)
 
-	src := ethdb.NewLMDB().Path(from).Flags(lmdb.Readonly).MustOpen()
+	src := ethdb.NewLMDB().Path(from).Flags(lmdb.Readonly).ReadAhead().MustOpen()
 	dst := ethdb.NewMDBX().Path(to).Flags(mdbx.WriteMap | mdbx.SafeNoSync | mdbx.NoMemInit).MustOpen()
 	srcTx, err1 := src.Begin(ctx, nil, ethdb.RO)
 	if err1 != nil {
