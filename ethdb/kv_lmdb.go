@@ -46,6 +46,7 @@ var (
 type BucketConfigsFunc func(defaultBuckets dbutils.BucketsCfg) dbutils.BucketsCfg
 type LmdbOpts struct {
 	inMem            bool
+	readAhead        bool // NO_READAHEAD flag is set by default because our DB >> RAM
 	flags            uint
 	path             string
 	exclusive        bool
@@ -65,6 +66,11 @@ func (opts LmdbOpts) Set(opt LmdbOpts) LmdbOpts {
 
 func (opts LmdbOpts) InMem() LmdbOpts {
 	opts.inMem = true
+	return opts
+}
+
+func (opts LmdbOpts) ReadAhead() LmdbOpts {
+	opts.readAhead = true
 	return opts
 }
 
@@ -142,7 +148,10 @@ func (opts LmdbOpts) Open() (kv KV, err error) {
 		}
 	}
 
-	var flags uint = opts.flags | lmdb.NoReadahead
+	var flags = opts.flags
+	if !opts.readAhead {
+		flags |= lmdb.NoReadahead
+	}
 	if opts.inMem {
 		flags |= lmdb.NoMetaSync
 	}

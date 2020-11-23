@@ -37,6 +37,7 @@ var _ DbCopier = &MdbxKV{}
 
 type MdbxOpts struct {
 	inMem            bool
+	readAhead        bool // NO_READAHEAD flag is set by default because our DB >> RAM
 	exclusive        bool
 	flags            uint
 	path             string
@@ -56,6 +57,11 @@ func (opts MdbxOpts) Set(opt MdbxOpts) MdbxOpts {
 
 func (opts MdbxOpts) InMem() MdbxOpts {
 	opts.inMem = true
+	return opts
+}
+
+func (opts MdbxOpts) ReadAhead() MdbxOpts {
+	opts.readAhead = true
 	return opts
 }
 
@@ -128,7 +134,10 @@ func (opts MdbxOpts) Open() (KV, error) {
 		return nil, fmt.Errorf("could not create dir: %s, %w", opts.path, err)
 	}
 
-	var flags uint = opts.flags | mdbx.NoReadahead
+	var flags = opts.flags
+	if !opts.readAhead {
+		flags |= mdbx.NoReadahead
+	}
 	if opts.inMem {
 		flags |= mdbx.NoMetaSync | mdbx.SafeNoSync
 	} else {
