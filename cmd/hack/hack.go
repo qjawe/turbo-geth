@@ -2017,17 +2017,19 @@ func receiptSizes(chaindata string) error {
 	sizes := make(map[int]int)
 	for k, _, err := c.First(); k != nil; k, _, err = c.NextNoDup() {
 		check(err)
-		cc, err := c.CountDuplicates()
+		//cc, err := c.CountDuplicates()
 		check(err)
-		sizes[int(cc)]++
 		//fmt.Printf("%x\n", k)
 		//fmt.Printf("\t%x\n", v)
 		//total += len(k) + len(v) + 8
-		//for k, v, err := c.NextDup(); k != nil; k, v, err = c.NextDup() {
-		//	check(err)
-		//	//total += len(v)
-		//	fmt.Printf("\t%x\n", v)
-		//}
+		i := 1
+		for k, _, err := c.NextDup(); k != nil; k, _, err = c.NextDup() {
+			check(err)
+			i++
+			//total += len(v)
+			//fmt.Printf("\t%x\n", v)
+		}
+		sizes[i]++
 	}
 	var lens = make([]int, len(sizes))
 	i := 0
