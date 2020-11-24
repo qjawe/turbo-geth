@@ -524,6 +524,12 @@ func (tx *mdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 			if err != nil {
 				return err
 			}
+			select {
+			default:
+			case <-logEvery.C:
+				log.Info("dropping bucket", "name", name, "current key", fmt.Sprintf("%x", k))
+			}
+
 			err = c.DeleteCurrent()
 			if err != nil {
 				return err
@@ -531,12 +537,6 @@ func (tx *mdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 			i++
 			if i == 100_000 {
 				break
-			}
-
-			select {
-			default:
-			case <-logEvery.C:
-				log.Info("dropping bucket", "name", name, "current key", fmt.Sprintf("%x", k))
 			}
 		}
 
