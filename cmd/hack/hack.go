@@ -2037,6 +2037,39 @@ func receiptSizes(chaindata string) error {
 	return nil
 }
 
+func cp(chaindata string) error {
+	db := ethdb.MustOpen(chaindata)
+	defer db.Close()
+	kv := db.KV()
+	err3 := db.ClearBuckets(dbutils.PlainStorageChangeSetBucket2)
+	check(err3)
+	tx, err := kv.Begin(context.Background(), nil, ethdb.RW)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	c := tx.CursorDupSort(dbutils.PlainStorageChangeSetBucket)
+	//defer c.Close()
+	c2 := tx.CursorDupSort(dbutils.PlainStorageChangeSetBucket2)
+	//defer c2.Close()
+	fmt.Printf("bkt: %s\n", *bucket)
+	for k, v, err := c.First(); k != nil; k, v, err = c.NextNoDup() {
+		check(err)
+		err = c2.Append(common.CopyBytes(k), common.CopyBytes(v))
+		check(err)
+		for k, v, err := c.NextDup(); k != nil; k, v, err = c.NextDup() {
+			check(err)
+			err = c2.Append(common.CopyBytes(k), common.CopyBytes(v))
+			check(err)
+		}
+	}
+	_ = tx.Commit(context.Background())
+	//check(err)
+	fmt.Println("done")
+	return nil
+}
+
 func dupSz(chaindata string) error {
 	db := ethdb.MustOpen(chaindata)
 	defer db.Close()
@@ -2258,6 +2291,11 @@ func main() {
 	}
 	if *action == "dupSz" {
 		if err := dupSz(*chaindata); err != nil {
+			fmt.Printf("Error: %v\n", err)
+		}
+	}
+	if *action == "cp" {
+		if err := cp(*chaindata); err != nil {
 			fmt.Printf("Error: %v\n", err)
 		}
 	}
