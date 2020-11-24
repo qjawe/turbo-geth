@@ -2043,7 +2043,7 @@ func cp(chaindata string) error {
 	kv := db.KV()
 	name := dbutils.PlainStorageChangeSetBucket
 	name2 := dbutils.PlainStorageChangeSetBucket2
-	err3 := db.ClearBuckets(name)
+	err3 := db.ClearBuckets(name2)
 	check(err3)
 	ctx := context.Background()
 	tx, err := kv.Begin(ctx, nil, ethdb.RW)
