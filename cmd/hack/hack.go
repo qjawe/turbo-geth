@@ -2090,7 +2090,7 @@ func cp(chaindata string) error {
 		LogDetailsLoad: func(k, v []byte) (additionalLogArguments []interface{}) {
 			err = tx.CommitAndBegin(ctx)
 			check(err)
-			return additionalLogArguments
+			return append(additionalLogArguments, "key", fmt.Sprintf("%x", k))
 		},
 		Comparator: cmp,
 	})
