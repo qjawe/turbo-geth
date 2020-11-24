@@ -2048,7 +2048,9 @@ func cp(chaindata string) error {
 	ctx := context.Background()
 	tx, err := kv.Begin(ctx, nil, ethdb.RW)
 	check(err)
-	defer tx.Rollback()
+	defer func() {
+		tx.Rollback()
+	}()
 
 	commitEvery := time.NewTicker(15 * time.Second)
 	defer commitEvery.Stop()
