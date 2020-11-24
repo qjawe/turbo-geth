@@ -2057,7 +2057,6 @@ func cp(chaindata string) error {
 
 	c := tx.CursorDupSort(name)
 	c2 := tx.CursorDupSort(name2)
-	fmt.Printf("bkt: %s\n", *bucket)
 	for k, v, err := c.First(); k != nil; k, v, err = c.NextNoDup() {
 		check(err)
 		select {
