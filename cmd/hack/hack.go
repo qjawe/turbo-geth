@@ -2043,11 +2043,15 @@ func cp(chaindata string) error {
 	kv := db.KV()
 	err3 := db.ClearBuckets(dbutils.PlainStorageChangeSetBucket2)
 	check(err3)
-	tx, err := kv.Begin(context.Background(), nil, ethdb.RW)
+	ctx := context.Background()
+	tx, err := kv.Begin(ctx, nil, ethdb.RW)
 	if err != nil {
 		return err
 	}
 	defer tx.Rollback()
+
+	commitEvery := time.NewTicker(15 * time.Second)
+	defer commitEvery.Stop()
 
 	c := tx.CursorDupSort(dbutils.PlainStorageChangeSetBucket)
 	//defer c.Close()
@@ -2056,6 +2060,20 @@ func cp(chaindata string) error {
 	fmt.Printf("bkt: %s\n", *bucket)
 	for k, v, err := c.First(); k != nil; k, v, err = c.NextNoDup() {
 		check(err)
+		select {
+		default:
+		case <-commitEvery.C:
+			log.Info("Progress", "bucket", name, "key", fmt.Sprintf("%x", k))
+			if err2 := tx.Commit(ctx); err2 != nil {
+				return err2
+			}
+			tx, err = kv.Begin(ctx, nil, ethdb.RW)
+			if err != nil {
+				return err
+			}
+			c = tx.CursorDupSort(dbutils.PlainStorageChangeSetBucket)
+			c2 = tx.CursorDupSort(dbutils.PlainStorageChangeSetBucket2)
+		}
 		err = c2.Append(common.CopyBytes(k), common.CopyBytes(v))
 		check(err)
 		for k, v, err := c.NextDup(); k != nil; k, v, err = c.NextDup() {
