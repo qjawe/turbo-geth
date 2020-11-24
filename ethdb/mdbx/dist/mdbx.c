@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>. */
 
 #define MDBX_ALLOY 1
-#define MDBX_BUILD_SOURCERY 7fb62b9ea3b7a16a523a861bb0c0eea52baa9cd0b2437b1964dfa5696dea557e_v0_9_1_131_gf76bf72
+#define MDBX_BUILD_SOURCERY 0cce6066448e692cb16ee305e921291d772f5e2586b5dd605edaedd851e8ef1d_v0_9_1_133_g23fd444
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -13837,6 +13837,13 @@ __cold int mdbx_env_open(MDBX_env *env, const char *pathname,
     goto bailout;
   }
 
+  /* Set the position in files outside of the data to avoid corruption
+   * due to erroneous use of file descriptors in the application code. */
+  mdbx_fseek(env->me_lfd, UINT64_C(1) << 63);
+  mdbx_fseek(env->me_lazy_fd, UINT64_C(1) << 63);
+  if (env->me_dsync_fd != INVALID_HANDLE_VALUE)
+    mdbx_fseek(env->me_dsync_fd, UINT64_C(1) << 63);
+
   const MDBX_env_flags_t rigorous_flags =
       MDBX_SAFE_NOSYNC | MDBX_DEPRECATED_MAPASYNC;
   const MDBX_env_flags_t mode_flags = rigorous_flags | MDBX_NOMETASYNC |
@@ -24512,10 +24519,9 @@ MDBX_INTERNAL_FUNC int mdbx_mresize(int flags, mdbx_mmap_t *map, size_t size,
   LARGE_INTEGER SectionSize;
   int err, rc = MDBX_SUCCESS;
 
-  if (!(flags & MDBX_RDONLY) && limit == map->limit && size > map->current) {
+  if (!(flags & MDBX_RDONLY) && limit == map->limit && size > map->current &&
+      /* workaround for Wine */ mdbx_NtExtendSection) {
     /* growth rw-section */
-    if (!mdbx_NtExtendSection)
-      return MDBX_UNABLE_EXTEND_MAPSIZE /* workaround for Wine */;
     SectionSize.QuadPart = size;
     status = mdbx_NtExtendSection(map->section, &SectionSize);
     if (!NT_SUCCESS(status))
@@ -25397,9 +25403,9 @@ __dll_export
         0,
         9,
         1,
-        131,
-        {"2020-11-20T11:52:44+03:00", "5bab85712c2a208b2bf3cc6a4643f9b4a1f375d0", "f76bf7202146022baed0fd5f4e8da60d5e24846c",
-         "v0.9.1-131-gf76bf72"},
+        133,
+        {"2020-11-23T10:47:07+03:00", "636a93829ae65e90d6da600a0ea2526e5fe1b76c", "23fd4444b5bdc0e203c02a0f85da5fb06c06ab86",
+         "v0.9.1-133-g23fd444"},
         sourcery};
 
 __dll_export
