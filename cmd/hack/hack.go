@@ -2011,15 +2011,15 @@ func receiptSizes(chaindata string) error {
 	}
 	defer tx.Rollback()
 
-	fmt.Printf("bucket: %s\n", dbutils.Log)
-	c := tx.Cursor(dbutils.Log)
+	fmt.Printf("bucket: %s\n", dbutils.StorageChangeSetBucket)
+	c := tx.CursorDupSort(dbutils.StorageChangeSetBucket)
 	defer c.Close()
 	sizes := make(map[int]int)
-	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
-		if err != nil {
-			return err
-		}
-		sizes[len(v)]++
+	for k, _, err := c.First(); k != nil; k, _, err = c.NextNoDup() {
+		check(err)
+		cc, err := c.CountDuplicates()
+		check(err)
+		sizes[int(cc)]++
 	}
 	var lens = make([]int, len(sizes))
 	i := 0
