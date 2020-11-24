@@ -2089,7 +2089,12 @@ func cp(chaindata string) error {
 		return true, nil
 	})
 	check(err)
-	err = collector.Load("", db, name2, etl.IdentityLoadFunc, etl.TransformArgs{
+	err = collector.Load("", tx, name2, etl.IdentityLoadFunc, etl.TransformArgs{
+		LogDetailsLoad: func(k, v []byte) (additionalLogArguments []interface{}) {
+			err = tx.CommitAndBegin(ctx)
+			check(err)
+			return additionalLogArguments
+		},
 		Comparator: cmp,
 	})
 	check(err)
