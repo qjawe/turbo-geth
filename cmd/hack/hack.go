@@ -2048,13 +2048,12 @@ func receiptSizes(chaindata string) error {
 func cp(chaindata string) error {
 	db := ethdb.MustOpen(chaindata)
 	defer db.Close()
-	kv := db.KV()
 	name := dbutils.PlainStorageChangeSetBucket
 	name2 := dbutils.PlainStorageChangeSetBucket2
 	err3 := db.ClearBuckets(name2)
 	check(err3)
 	ctx := context.Background()
-	txRead, err := kv.Begin(ctx, nil, ethdb.RO)
+	txRead, err := db.Begin(context.Background(), ethdb.RO)
 	check(err)
 	tx, err := db.Begin(ctx, ethdb.RW)
 	check(err)
@@ -2066,16 +2065,14 @@ func cp(chaindata string) error {
 	commitEvery := time.NewTicker(15 * time.Second)
 	defer commitEvery.Stop()
 
-	c := txRead.CursorDupSort(name)
-	cmp := txRead.(ethdb.HasTx).Tx().Comparator(name)
+	cmp := tx.(ethdb.HasTx).Tx().Comparator(name)
 	buf := etl.NewSortableBuffer(etl.BufferOptimalSize * 4)
 	buf.SetComparator(cmp)
 
 	collector := etl.NewCollector("", etl.NewSortableBuffer(etl.BufferOptimalSize*4))
 
 	fromDBFormat := changeset.FromDBFormat(changeset.Mapper[name].KeySize)
-	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
-		check(err)
+	err = txRead.Walk(name, nil, 0, func(k, v []byte) (bool, error) {
 		blockN, stKey, stVal := fromDBFormat(k, v)
 
 		select {
@@ -2090,7 +2087,9 @@ func cp(chaindata string) error {
 
 		err = collector.Collect(newK, stVal)
 		check(err)
-	}
+		return true, nil
+	})
+	check(err)
 	err = collector.Load("", db, name2, etl.IdentityLoadFunc, etl.TransformArgs{
 		Comparator: cmp,
 	})
