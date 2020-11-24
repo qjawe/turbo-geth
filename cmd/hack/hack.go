@@ -2115,18 +2115,21 @@ func dupSz(chaindata string) error {
 	fmt.Printf("bkt: %s\n", *bucket)
 	defer c.Close()
 	total := 0
+	undup := 0
 	for k, v, err := c.First(); k != nil; k, v, err = c.NextNoDup() {
 		check(err)
 		//fmt.Printf("%x\n", k)
 		//fmt.Printf("\t%x\n", v)
 		total += len(k) + len(v) + 8
+		undup += len(k) + len(v) + 8
 		for k, v, err := c.NextDup(); k != nil; k, v, err = c.NextDup() {
 			check(err)
 			total += len(v)
+			undup += len(k) + len(v) + 8
 			//fmt.Printf("\t%x\n", v)
 		}
 	}
-	fmt.Printf("total sz: %s\n", common.StorageSize(total))
+	fmt.Printf("total sz: %s, undup: %s\n", common.StorageSize(total), common.StorageSize(undup))
 
 	return nil
 }
