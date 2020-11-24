@@ -2019,6 +2019,9 @@ func receiptSizes(chaindata string) error {
 		check(err)
 		cc, err := c.CountDuplicates()
 		check(err)
+		if cc == 1 {
+			continue
+		}
 		sizes[int(cc)/100]++
 		//fmt.Printf("%x\n", k)
 		//fmt.Printf("\t%x\n", v)
