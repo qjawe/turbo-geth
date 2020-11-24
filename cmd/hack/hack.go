@@ -2065,7 +2065,7 @@ func cp(chaindata string) error {
 	cmp := tx.(ethdb.HasTx).Tx().Comparator(name)
 	buf := etl.NewSortableBuffer(etl.BufferOptimalSize * 4)
 	buf.SetComparator(cmp)
-	collector := etl.NewCollector("", buf)
+	collector := etl.NewCollector(chaindata, buf)
 
 	fromDBFormat := changeset.FromDBFormat(changeset.Mapper[name].KeySize)
 	err = tx.Walk(name, nil, 0, func(k, v []byte) (bool, error) {
