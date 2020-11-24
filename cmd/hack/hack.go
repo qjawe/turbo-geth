@@ -2066,7 +2066,6 @@ func cp(chaindata string) error {
 	commitEvery := time.NewTicker(15 * time.Second)
 	defer commitEvery.Stop()
 
-	c := txRead.CursorDupSort(name)
 	c2 := tx.CursorDupSort(name2)
 
 	err = changeset.Walk(db, name, nil, 0, func(blockN uint64, k, v []byte) (bool, error) {
