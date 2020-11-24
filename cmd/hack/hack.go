@@ -2098,6 +2098,8 @@ func cp(chaindata string) error {
 		Comparator: cmp,
 	})
 	check(err)
+	_, err = tx.Commit()
+	check(err)
 	fmt.Println("done")
 	return nil
 }
