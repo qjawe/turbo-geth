@@ -2066,9 +2066,17 @@ func cp(chaindata string) error {
 	commitEvery := time.NewTicker(15 * time.Second)
 	defer commitEvery.Stop()
 
+	c := txRead.CursorDupSort(name)
 	c2 := tx.CursorDupSort(name2)
 
-	err = changeset.Walk(db, name, nil, 0, func(blockN uint64, k, v []byte) (bool, error) {
+	check(err)
+
+	var prevK []byte
+	fromDBFormat := changeset.FromDBFormat(changeset.Mapper[name].KeySize)
+	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
+		check(err)
+		blockN, stKey, stVal := fromDBFormat(k, v)
+
 		select {
 		default:
 		case <-commitEvery.C:
@@ -2080,14 +2088,21 @@ func cp(chaindata string) error {
 			c2 = tx.CursorDupSort(name2)
 		}
 
-		newK := make([]byte, 8+len(v))
+		newK := make([]byte, 8+len(stKey))
 		binary.BigEndian.PutUint64(newK, blockN)
-		copy(newK[8:], k)
-		err = c2.Append(newK, common.CopyBytes(v))
-		return false, nil
-	})
-	check(err)
+		copy(newK[8:], stKey)
 
+		if bytes.Equal(k, prevK) {
+			if err := c2.(ethdb.CursorDupSort).AppendDup(k, stVal); err != nil {
+				return fmt.Errorf("%s: append: k=%x, %w", "", k, err)
+			}
+		} else {
+			if err := c2.Append(k, v); err != nil {
+				return fmt.Errorf("%s: append: k=%x, %w", "", k, err)
+			}
+		}
+		prevK = k
+	}
 	err = tx.Commit(context.Background())
 	check(err)
 	fmt.Println("done")
