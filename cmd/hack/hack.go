@@ -2056,7 +2056,7 @@ func cp(chaindata string) error {
 	ctx := context.Background()
 	txRead, err := kv.Begin(ctx, nil, ethdb.RO)
 	check(err)
-	tx, err := kv.Begin(ctx, nil, ethdb.RW)
+	tx, err := db.Begin(ctx, ethdb.RW)
 	check(err)
 	defer func() {
 		txRead.Rollback()
@@ -2067,11 +2067,12 @@ func cp(chaindata string) error {
 	defer commitEvery.Stop()
 
 	c := txRead.CursorDupSort(name)
-	c2 := tx.CursorDupSort(name2)
+	cmp := txRead.(ethdb.HasTx).Tx().Comparator(name)
+	buf := etl.NewSortableBuffer(etl.BufferOptimalSize * 4)
+	buf.SetComparator(cmp)
 
-	check(err)
+	collector := etl.NewCollector("", etl.NewSortableBuffer(etl.BufferOptimalSize*4))
 
-	var prevK []byte
 	fromDBFormat := changeset.FromDBFormat(changeset.Mapper[name].KeySize)
 	for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 		check(err)
@@ -2081,29 +2082,18 @@ func cp(chaindata string) error {
 		default:
 		case <-commitEvery.C:
 			log.Info("Progress", "bucket", name2, "blockN", fmt.Sprintf("%d", blockN))
-			err = tx.Commit(ctx)
-			check(err)
-			tx, err = kv.Begin(ctx, nil, ethdb.RW)
-			check(err)
-			c2 = tx.CursorDupSort(name2)
 		}
 
 		newK := make([]byte, 8+len(stKey))
 		binary.BigEndian.PutUint64(newK, blockN)
 		copy(newK[8:], stKey)
 
-		if bytes.Equal(newK, prevK) {
-			if err := c2.(ethdb.CursorDupSort).AppendDup(k, stVal); err != nil {
-				return fmt.Errorf("%s: append: k=%x, %w", "", k, err)
-			}
-		} else {
-			if err := c2.Append(k, v); err != nil {
-				return fmt.Errorf("%s: append: k=%x, %w", "", k, err)
-			}
-		}
-		prevK = newK
+		err = collector.Collect(newK, stVal)
+		check(err)
 	}
-	err = tx.Commit(context.Background())
+	err = collector.Load("", db, name2, etl.IdentityLoadFunc, etl.TransformArgs{
+		Comparator: cmp,
+	})
 	check(err)
 	fmt.Println("done")
 	return nil
