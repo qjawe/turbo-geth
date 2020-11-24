@@ -2011,22 +2011,22 @@ func receiptSizes(chaindata string) error {
 	}
 	defer tx.Rollback()
 
-	fmt.Printf("bucket: %s\n", dbutils.PlainStorageChangeSetBucket2)
-	c := tx.CursorDupSort(dbutils.PlainStorageChangeSetBucket2)
+	fmt.Printf("bucket: %s\n", dbutils.PlainAccountChangeSetBucket2)
+	c := tx.CursorDupSort(dbutils.PlainAccountChangeSetBucket2)
 	defer c.Close()
 	sizes := make(map[int]int)
 	for k, _, err := c.First(); k != nil; k, _, err = c.NextNoDup() {
 		check(err)
 		cc, err := c.CountDuplicates()
 		check(err)
-		sizes[int(cc)]++
+		sizes[int(cc)/10]++
 		//fmt.Printf("%x\n", k)
 		//fmt.Printf("\t%x\n", v)
 		//total += len(k) + len(v) + 8
 		//for k, _, err := c.NextDup(); k != nil; k, _, err = c.NextDup() {
 		//	check(err)
 		//	//total += len(v)
-		//	//fmt.Printf("\t%x\n", v)
+		//fmt.Printf("\t%x\n", v)
 		//}
 	}
 	var lens = make([]int, len(sizes))
@@ -2068,26 +2068,27 @@ func cp(chaindata string) error {
 
 	c := txRead.CursorDupSort(name)
 	c2 := tx.CursorDupSort(name2)
-	for k, v, err := c.First(); k != nil; k, v, err = c.NextNoDup() {
-		check(err)
+
+	err = changeset.Walk(db, name, nil, 0, func(blockN uint64, k, v []byte) (bool, error) {
 		select {
 		default:
 		case <-commitEvery.C:
-			log.Info("Progress", "bucket", name2, "key", fmt.Sprintf("%x", k))
+			log.Info("Progress", "bucket", name2, "blockN", fmt.Sprintf("%d", blockN))
 			err = tx.Commit(ctx)
 			check(err)
 			tx, err = kv.Begin(ctx, nil, ethdb.RW)
 			check(err)
 			c2 = tx.CursorDupSort(name2)
 		}
-		err = c2.Append(common.CopyBytes(k), common.CopyBytes(v))
-		check(err)
-		for k, v, err := c.NextDup(); k != nil; k, v, err = c.NextDup() {
-			check(err)
-			err = c2.AppendDup(common.CopyBytes(k), common.CopyBytes(v))
-			check(err)
-		}
-	}
+
+		newK := make([]byte, 8+len(v))
+		binary.BigEndian.PutUint64(newK, blockN)
+		copy(newK[8:], k)
+		err = c2.Append(newK, common.CopyBytes(v))
+		return false, nil
+	})
+	check(err)
+
 	err = tx.Commit(context.Background())
 	check(err)
 	fmt.Println("done")
