@@ -2046,16 +2046,19 @@ func cp(chaindata string) error {
 	err3 := db.ClearBuckets(name2)
 	check(err3)
 	ctx := context.Background()
+	txRead, err := kv.Begin(ctx, nil, ethdb.RO)
+	check(err)
 	tx, err := kv.Begin(ctx, nil, ethdb.RW)
 	check(err)
 	defer func() {
+		txRead.Rollback()
 		tx.Rollback()
 	}()
 
 	commitEvery := time.NewTicker(15 * time.Second)
 	defer commitEvery.Stop()
 
-	c := tx.CursorDupSort(name)
+	c := txRead.CursorDupSort(name)
 	c2 := tx.CursorDupSort(name2)
 	for k, v, err := c.First(); k != nil; k, v, err = c.NextNoDup() {
 		check(err)
@@ -2067,15 +2070,12 @@ func cp(chaindata string) error {
 			check(err)
 			tx, err = kv.Begin(ctx, nil, ethdb.RW)
 			check(err)
-			c = tx.CursorDupSort(name)
 			c2 = tx.CursorDupSort(name2)
 		}
 		err = c2.Append(common.CopyBytes(k), common.CopyBytes(v))
 		check(err)
-		fmt.Printf("1: %x, %x\n", k, v)
 		for k, v, err := c.NextDup(); k != nil; k, v, err = c.NextDup() {
 			check(err)
-			fmt.Printf("2: %x, %x\n", k, v)
 			err = c2.AppendDup(common.CopyBytes(k), common.CopyBytes(v))
 			check(err)
 		}
