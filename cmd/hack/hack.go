@@ -2081,8 +2081,8 @@ func cp(chaindata string) error {
 			check(err)
 		}
 	}
-	_ = tx.Commit(context.Background())
-	//check(err)
+	err = tx.Commit(context.Background())
+	check(err)
 	fmt.Println("done")
 	return nil
 }

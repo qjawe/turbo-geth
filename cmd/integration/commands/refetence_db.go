@@ -323,21 +323,28 @@ func toMdbx(ctx context.Context, from, to string) error {
 		}
 
 		c := dstTx.Cursor(name)
-		appendFunc := c.Append
-		if b.Flags&dbutils.DupSort != 0 && !b.AutoDupSortKeysConversion {
-			appendFunc = c.(ethdb.CursorDupSort).AppendDup
-		} else if b.Flags&dbutils.DupFixed != 0 && !b.AutoDupSortKeysConversion {
-			appendFunc = c.(ethdb.CursorDupFixed).AppendDup
-		}
-
 		srcC := srcTx.Cursor(name)
+		var prevK []byte
 		for k, v, err := srcC.First(); k != nil; k, v, err = srcC.Next() {
 			if err != nil {
 				return err
 			}
 
-			if err = appendFunc(k, v); err != nil {
-				return err
+			if b.Flags&dbutils.DupSort != 0 && !b.AutoDupSortKeysConversion {
+				if bytes.Equal(k, prevK) {
+					if err := c.(ethdb.CursorDupSort).AppendDup(k, v); err != nil {
+						return fmt.Errorf("%s: append: k=%x, %w", "", k, err)
+					}
+				} else {
+					if err := c.Append(k, v); err != nil {
+						return fmt.Errorf("%s: append: k=%x, %w", "", k, err)
+					}
+				}
+				prevK = k
+			} else {
+				if err := c.Append(k, v); err != nil {
+					return fmt.Errorf("%s: append: k=%x, %w", "", k, err)
+				}
 			}
 
 			select {
@@ -354,12 +361,6 @@ func toMdbx(ctx context.Context, from, to string) error {
 					return err
 				}
 				c = dstTx.Cursor(name)
-				appendFunc = c.Append
-				if b.Flags&dbutils.DupSort != 0 && !b.AutoDupSortKeysConversion {
-					appendFunc = c.(ethdb.CursorDupSort).AppendDup
-				} else if b.Flags&dbutils.DupFixed != 0 && !b.AutoDupSortKeysConversion {
-					appendFunc = c.(ethdb.CursorDupFixed).AppendDup
-				}
 			}
 		}
 
