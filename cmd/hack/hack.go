@@ -2047,9 +2047,7 @@ func cp(chaindata string) error {
 	check(err3)
 	ctx := context.Background()
 	tx, err := kv.Begin(ctx, nil, ethdb.RW)
-	if err != nil {
-		return err
-	}
+	check(err)
 	defer tx.Rollback()
 
 	commitEvery := time.NewTicker(15 * time.Second)
@@ -2062,14 +2060,11 @@ func cp(chaindata string) error {
 		select {
 		default:
 		case <-commitEvery.C:
-			log.Info("Progress", "bucket", name, "key", fmt.Sprintf("%x", k))
-			if err2 := tx.Commit(ctx); err2 != nil {
-				return err2
-			}
+			log.Info("Progress", "bucket", name2, "key", fmt.Sprintf("%x", k))
+			err = tx.Commit(ctx)
+			check(err)
 			tx, err = kv.Begin(ctx, nil, ethdb.RW)
-			if err != nil {
-				return err
-			}
+			check(err)
 			c = tx.CursorDupSort(name)
 			c2 = tx.CursorDupSort(name2)
 		}
