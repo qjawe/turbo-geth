@@ -2121,11 +2121,11 @@ func dupSz(chaindata string) error {
 		//fmt.Printf("%x\n", k)
 		//fmt.Printf("\t%x\n", v)
 		total += len(k) + len(v) + 8
-		undup += len(k) + len(v) + 8
+		undup += len(k) + len(v)
 		for k, v, err := c.NextDup(); k != nil; k, v, err = c.NextDup() {
 			check(err)
 			total += len(v)
-			undup += len(k) + len(v) + 8
+			undup += len(k) + len(v)
 			//fmt.Printf("\t%x\n", v)
 		}
 	}
