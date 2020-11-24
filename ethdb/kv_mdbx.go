@@ -531,20 +531,23 @@ func (tx *mdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 				log.Info("dropping bucket", "name", name, "current key", fmt.Sprintf("%x", k))
 			}
 
+			i++
 			if isDupSort {
 				err = c.(CursorDupSort).DeleteCurrentDuplicates()
 				if err != nil {
 					return err
+				}
+				if i == 1000 {
+					break
 				}
 			} else {
 				err = c.DeleteCurrent()
 				if err != nil {
 					return err
 				}
-			}
-			i++
-			if i == 100_000 {
-				break
+				if i == 100_000 {
+					break
+				}
 			}
 		}
 
