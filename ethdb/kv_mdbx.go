@@ -520,6 +520,7 @@ func (tx *mdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 		c := tx.Cursor(name)
 		i := 0
 		var k []byte
+		isDupSort := tx.db.buckets[name].Flags&dbutils.DupSort != 0
 		for k, _, err = c.First(); k != nil; k, _, err = c.First() {
 			if err != nil {
 				return err
@@ -530,9 +531,16 @@ func (tx *mdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 				log.Info("dropping bucket", "name", name, "current key", fmt.Sprintf("%x", k))
 			}
 
-			err = c.DeleteCurrent()
-			if err != nil {
-				return err
+			if isDupSort {
+				err = c.(CursorDupSort).DeleteCurrentDuplicates()
+				if err != nil {
+					return err
+				}
+			} else {
+				err = c.DeleteCurrent()
+				if err != nil {
+					return err
+				}
 			}
 			i++
 			if i == 100_000 {
