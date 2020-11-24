@@ -2092,7 +2092,7 @@ func cp(chaindata string) error {
 		binary.BigEndian.PutUint64(newK, blockN)
 		copy(newK[8:], stKey)
 
-		if bytes.Equal(k, prevK) {
+		if bytes.Equal(newK, prevK) {
 			if err := c2.(ethdb.CursorDupSort).AppendDup(k, stVal); err != nil {
 				return fmt.Errorf("%s: append: k=%x, %w", "", k, err)
 			}
@@ -2101,7 +2101,7 @@ func cp(chaindata string) error {
 				return fmt.Errorf("%s: append: k=%x, %w", "", k, err)
 			}
 		}
-		prevK = k
+		prevK = newK
 	}
 	err = tx.Commit(context.Background())
 	check(err)
