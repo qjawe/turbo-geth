@@ -2053,12 +2053,9 @@ func cp(chaindata string) error {
 	err3 := db.ClearBuckets(name2)
 	check(err3)
 	ctx := context.Background()
-	txRead, err := db.Begin(context.Background(), ethdb.RO)
-	check(err)
 	tx, err := db.Begin(ctx, ethdb.RW)
 	check(err)
 	defer func() {
-		txRead.Rollback()
 		tx.Rollback()
 	}()
 
@@ -2071,7 +2068,7 @@ func cp(chaindata string) error {
 	collector := etl.NewCollector("", buf)
 
 	fromDBFormat := changeset.FromDBFormat(changeset.Mapper[name].KeySize)
-	err = txRead.Walk(name, nil, 0, func(k, v []byte) (bool, error) {
+	err = tx.Walk(name, nil, 0, func(k, v []byte) (bool, error) {
 		blockN, stKey, stVal := fromDBFormat(k, v)
 
 		select {
