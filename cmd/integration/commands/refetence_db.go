@@ -325,12 +325,13 @@ func toMdbx(ctx context.Context, from, to string) error {
 		c := dstTx.Cursor(name)
 		srcC := srcTx.Cursor(name)
 		var prevK []byte
+		isDupSort := b.Flags&dbutils.DupSort != 0 && !b.AutoDupSortKeysConversion
 		for k, v, err := srcC.First(); k != nil; k, v, err = srcC.Next() {
 			if err != nil {
 				return err
 			}
 
-			if b.Flags&dbutils.DupSort != 0 && !b.AutoDupSortKeysConversion {
+			if isDupSort {
 				if bytes.Equal(k, prevK) {
 					if err := c.(ethdb.CursorDupSort).AppendDup(k, v); err != nil {
 						return fmt.Errorf("%s: append: k=%x, %w", "", k, err)
