@@ -2072,8 +2072,10 @@ func cp(chaindata string) error {
 		}
 		err = c2.Append(common.CopyBytes(k), common.CopyBytes(v))
 		check(err)
+		fmt.Printf("1: %x, %x\n", k, v)
 		for k, v, err := c.NextDup(); k != nil; k, v, err = c.NextDup() {
 			check(err)
+			fmt.Printf("2: %x, %x\n", k, v)
 			err = c2.AppendDup(common.CopyBytes(k), common.CopyBytes(v))
 			check(err)
 		}
