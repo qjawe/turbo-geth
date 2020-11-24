@@ -776,7 +776,7 @@ func (c *IHCursor) _seek(seek []byte) (k, v []byte, err error) {
 		}
 	}
 
-	err = c.c.Delete(k, v)
+	err = c.c.DeleteCurrent()
 	if err != nil {
 		return []byte{}, nil, err
 	}
@@ -807,7 +807,7 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 			}
 		}
 
-		err = c.c.Delete(k, v)
+		err = c.c.DeleteCurrent()
 		if err != nil {
 			return []byte{}, nil, err
 		}
