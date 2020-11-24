@@ -2020,6 +2020,14 @@ func receiptSizes(chaindata string) error {
 		cc, err := c.CountDuplicates()
 		check(err)
 		sizes[int(cc)]++
+		//fmt.Printf("%x\n", k)
+		//fmt.Printf("\t%x\n", v)
+		//total += len(k) + len(v) + 8
+		//for k, v, err := c.NextDup(); k != nil; k, v, err = c.NextDup() {
+		//	check(err)
+		//	//total += len(v)
+		//	fmt.Printf("\t%x\n", v)
+		//}
 	}
 	var lens = make([]int, len(sizes))
 	i := 0
@@ -2029,9 +2037,9 @@ func receiptSizes(chaindata string) error {
 	}
 	sort.Ints(lens)
 	for _, l := range lens {
-		if sizes[l] < 100000 {
-			continue
-		}
+		//if sizes[l] < 100000 {
+		//	continue
+		//}
 		fmt.Printf("%6d - %d\n", l, sizes[l])
 	}
 	return nil
