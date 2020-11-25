@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>. */
 
 #define MDBX_ALLOY 1
-#define MDBX_BUILD_SOURCERY 9cca1e9976a4defe17fd67368a79f9bb21db9933d4db320bf64c7df95ff9eb2f_v0_9_1_137_gd9b95aa
+#define MDBX_BUILD_SOURCERY 8d6e38d79c0c12de0524b2725ce3cd654a2b19095f635450f971020f4fda7173_v0_9_1_138_g6d2914c9
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -680,7 +680,6 @@ __extern_C key_t ftok(const char *, int);
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
-#include <excpt.h>
 #include <tlhelp32.h>
 #include <windows.h>
 #include <winnt.h>
@@ -7835,9 +7834,11 @@ static __cold int mdbx_mapresize(MDBX_env *env, const pgno_t used_pgno,
     goto bailout;
 
   if (limit_bytes != env->me_dxb_mmap.limit && env->me_lck && !implicit) {
-    rc = mdbx_rdt_lock(env) /* lock readers table until remap done */;
-    if (unlikely(rc != MDBX_SUCCESS))
+    int err = mdbx_rdt_lock(env) /* lock readers table until remap done */;
+    if (unlikely(MDBX_IS_ERROR(err))) {
+      rc = err;
       goto bailout;
+    }
 
     /* looking for readers from this process */
     MDBX_lockinfo *const lck = env->me_lck;
@@ -12570,9 +12571,11 @@ mdbx_env_set_geometry(MDBX_env *env, intptr_t size_lower, intptr_t size_now,
           rc = MDBX_EPERM;
           goto bailout;
         }
-        rc = mdbx_rdt_lock(env);
-        if (unlikely(rc != MDBX_SUCCESS))
+        int err = mdbx_rdt_lock(env);
+        if (unlikely(MDBX_IS_ERROR(err))) {
+          rc = err;
           goto bailout;
+        }
 
         /* Check if there are any reading threads that do not use the SRWL */
         const size_t CurrentTid = GetCurrentThreadId();
@@ -23564,15 +23567,6 @@ MDBX_INTERNAL_FUNC int mdbx_fastmutex_destroy(mdbx_fastmutex_t *fastmutex) {
 MDBX_INTERNAL_FUNC int mdbx_fastmutex_acquire(mdbx_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   EnterCriticalSection(fastmutex);
-  __try {
-    EnterCriticalSection(fastmutex);
-  } __except (
-      (GetExceptionCode() ==
-       0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
-          ? EXCEPTION_EXECUTE_HANDLER
-          : EXCEPTION_CONTINUE_SEARCH) {
-    return ERROR_POSSIBLE_DEADLOCK;
-  }
   return MDBX_SUCCESS;
 #else
   return pthread_mutex_lock(fastmutex);
@@ -25419,9 +25413,9 @@ __dll_export
         0,
         9,
         1,
-        137,
-        {"2020-11-25T10:49:39+03:00", "ea5214a2d59d648af34e82d8dd5a289eb3af42b8", "d9b95aaff06c0b0b340dd2e34bcadcf11ce741dc",
-         "v0.9.1-137-gd9b95aa"},
+        138,
+        {"2020-11-25T17:55:29+03:00", "f107e15d0925be4c74830eea091d547250b4edf8", "6d2914c99bf5bd672147f00fc290569b1bb33a8f",
+         "v0.9.1-138-g6d2914c9"},
         sourcery};
 
 __dll_export
@@ -25582,15 +25576,7 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
     if (!TryEnterCriticalSection(&env->me_windowsbug_lock))
       return MDBX_BUSY;
   } else {
-    __try {
-      EnterCriticalSection(&env->me_windowsbug_lock);
-    }
-    __except ((GetExceptionCode() ==
-                 0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
-                    ? EXCEPTION_EXECUTE_HANDLER
-                    : EXCEPTION_CONTINUE_SEARCH) {
-      return ERROR_POSSIBLE_DEADLOCK;
-    }
+    EnterCriticalSection(&env->me_windowsbug_lock);
   }
 
   if ((env->me_flags & MDBX_EXCLUSIVE) ||

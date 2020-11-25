@@ -1242,5 +1242,3 @@ wcsstr
 wcstol
 wcstombs
 wcstoul
-__C_specific_handler
-_except_handler4_common
