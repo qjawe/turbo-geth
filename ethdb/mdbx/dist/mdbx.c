@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>. */
 
 #define MDBX_ALLOY 1
-#define MDBX_BUILD_SOURCERY 0cce6066448e692cb16ee305e921291d772f5e2586b5dd605edaedd851e8ef1d_v0_9_1_133_g23fd444
+#define MDBX_BUILD_SOURCERY 9cca1e9976a4defe17fd67368a79f9bb21db9933d4db320bf64c7df95ff9eb2f_v0_9_1_137_gd9b95aa
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -680,6 +680,7 @@ __extern_C key_t ftok(const char *, int);
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#include <excpt.h>
 #include <tlhelp32.h>
 #include <windows.h>
 #include <winnt.h>
@@ -13149,7 +13150,9 @@ static __cold int mdbx_setup_lck(MDBX_env *env, char *lck_pathname,
 
     /* ensure the file system is read-only */
     err = mdbx_check_fs_rdonly(env->me_lazy_fd, lck_pathname, err);
-    if (err != MDBX_SUCCESS)
+    if (err != MDBX_SUCCESS &&
+        /* ignore ERROR_NOT_SUPPORTED for exclusive mode */
+        !(err == MDBX_ENOSYS && (env->me_flags & MDBX_EXCLUSIVE)))
       return err;
 
     /* LY: without-lck mode (e.g. exclusive or on read-only filesystem) */
@@ -23188,6 +23191,9 @@ typedef struct _FILE_PROVIDER_EXTERNAL_INFO_V1 {
 #ifndef STATUS_INVALID_DEVICE_REQUEST
 #define STATUS_INVALID_DEVICE_REQUEST ((NTSTATUS)0xC0000010L)
 #endif
+#ifndef STATUS_NOT_SUPPORTED
+#define STATUS_NOT_SUPPORTED ((NTSTATUS)0xC00000BBL)
+#endif
 
 #ifndef FILE_DEVICE_FILE_SYSTEM
 #define FILE_DEVICE_FILE_SYSTEM 0x00000009
@@ -23558,6 +23564,15 @@ MDBX_INTERNAL_FUNC int mdbx_fastmutex_destroy(mdbx_fastmutex_t *fastmutex) {
 MDBX_INTERNAL_FUNC int mdbx_fastmutex_acquire(mdbx_fastmutex_t *fastmutex) {
 #if defined(_WIN32) || defined(_WIN64)
   EnterCriticalSection(fastmutex);
+  __try {
+    EnterCriticalSection(fastmutex);
+  } __except (
+      (GetExceptionCode() ==
+       0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
+          ? EXCEPTION_EXECUTE_HANDLER
+          : EXCEPTION_CONTINUE_SEARCH) {
+    return ERROR_POSSIBLE_DEADLOCK;
+  }
   return MDBX_SUCCESS;
 #else
   return pthread_mutex_lock(fastmutex);
@@ -24135,7 +24150,8 @@ static int mdbx_check_fs_local(mdbx_filehandle_t handle, int flags) {
       if (!(flags & MDBX_EXCLUSIVE))
         return ERROR_REMOTE_STORAGE_MEDIA_ERROR;
     } else if (rc != STATUS_OBJECT_NOT_EXTERNALLY_BACKED &&
-               rc != STATUS_INVALID_DEVICE_REQUEST)
+               rc != STATUS_INVALID_DEVICE_REQUEST &&
+               rc != STATUS_NOT_SUPPORTED)
       return ntstatus2errcode(rc);
   }
 
@@ -25403,9 +25419,9 @@ __dll_export
         0,
         9,
         1,
-        133,
-        {"2020-11-23T10:47:07+03:00", "636a93829ae65e90d6da600a0ea2526e5fe1b76c", "23fd4444b5bdc0e203c02a0f85da5fb06c06ab86",
-         "v0.9.1-133-g23fd444"},
+        137,
+        {"2020-11-25T10:49:39+03:00", "ea5214a2d59d648af34e82d8dd5a289eb3af42b8", "d9b95aaff06c0b0b340dd2e34bcadcf11ce741dc",
+         "v0.9.1-137-gd9b95aa"},
         sourcery};
 
 __dll_export
@@ -25566,7 +25582,15 @@ int mdbx_txn_lock(MDBX_env *env, bool dontwait) {
     if (!TryEnterCriticalSection(&env->me_windowsbug_lock))
       return MDBX_BUSY;
   } else {
-    EnterCriticalSection(&env->me_windowsbug_lock);
+    __try {
+      EnterCriticalSection(&env->me_windowsbug_lock);
+    }
+    __except ((GetExceptionCode() ==
+                 0xC0000194 /* STATUS_POSSIBLE_DEADLOCK / EXCEPTION_POSSIBLE_DEADLOCK */)
+                    ? EXCEPTION_EXECUTE_HANDLER
+                    : EXCEPTION_CONTINUE_SEARCH) {
+      return ERROR_POSSIBLE_DEADLOCK;
+    }
   }
 
   if ((env->me_flags & MDBX_EXCLUSIVE) ||

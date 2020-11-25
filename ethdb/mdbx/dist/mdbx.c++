@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>. */
 
 #define MDBX_ALLOY 1
-#define MDBX_BUILD_SOURCERY 0cce6066448e692cb16ee305e921291d772f5e2586b5dd605edaedd851e8ef1d_v0_9_1_133_g23fd444
+#define MDBX_BUILD_SOURCERY 9cca1e9976a4defe17fd67368a79f9bb21db9933d4db320bf64c7df95ff9eb2f_v0_9_1_137_gd9b95aa
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -680,6 +680,7 @@ __extern_C key_t ftok(const char *, int);
 #ifndef WIN32_LEAN_AND_MEAN
 #define WIN32_LEAN_AND_MEAN
 #endif
+#include <excpt.h>
 #include <tlhelp32.h>
 #include <windows.h>
 #include <winnt.h>
