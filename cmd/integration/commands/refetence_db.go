@@ -298,7 +298,7 @@ func toMdbx(ctx context.Context, from, to string) error {
 		return flags | lmdb.Readonly ^ lmdb.NoReadahead
 	}).MustOpen()
 	dst := ethdb.NewMDBX().Path(to).Flags(func(flags uint) uint {
-		return flags | mdbx.WriteMap | mdbx.SafeNoSync | mdbx.NoMemInit | mdbx.Exclusive
+		return flags | mdbx.WriteMap | mdbx.NoMemInit
 	}).MustOpen()
 
 	srcTx, err1 := src.Begin(ctx, nil, ethdb.RO)

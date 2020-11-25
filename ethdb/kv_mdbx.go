@@ -48,7 +48,7 @@ type MdbxOpts struct {
 func NewMDBX() MdbxOpts {
 	return MdbxOpts{
 		bucketsCfg: DefaultBucketConfigs,
-		flags:      mdbx.NoReadahead | mdbx.Coalesce, // | mdbx.LifoReclaim
+		flags:      mdbx.NoReadahead | mdbx.Coalesce | mdbx.Durable, // | mdbx.LifoReclaim,
 	}
 }
 
@@ -137,9 +137,8 @@ func (opts MdbxOpts) Open() (KV, error) {
 
 	var flags = opts.flags
 	if opts.inMem {
+		flags ^= mdbx.Durable
 		flags |= mdbx.NoMetaSync | mdbx.SafeNoSync
-	} else {
-		flags |= mdbx.Durable
 	}
 
 	err = env.Open(opts.path, flags, 0664)
