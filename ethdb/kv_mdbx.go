@@ -303,7 +303,7 @@ func (db *MdbxKV) Begin(_ context.Context, parent Tx, flags TxFlags) (Tx, error)
 		nativeFlags |= mdbx.Readonly
 	}
 	if flags&NoSync != 0 {
-		nativeFlags |= mdbx.TxNoSync | mdbx.TxNoMetaSync
+		nativeFlags |= mdbx.TxNoSync
 	}
 
 	var parentTx *mdbx.Txn
@@ -543,7 +543,7 @@ func (tx *mdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 				if err != nil {
 					return err
 				}
-				if i == 100_000 {
+				if i == 10_000 {
 					break
 				}
 			}
