@@ -535,7 +535,7 @@ func (tx *mdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 				if err != nil {
 					return err
 				}
-				if i == 1000 {
+				if i == 10_000 {
 					break
 				}
 			} else {
