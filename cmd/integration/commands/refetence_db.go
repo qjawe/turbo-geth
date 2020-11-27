@@ -295,7 +295,7 @@ func toMdbx(ctx context.Context, from, to string) error {
 	_ = os.RemoveAll(to)
 
 	src := ethdb.NewLMDB().Path(from).Flags(func(flags uint) uint {
-		return flags | lmdb.Readonly ^ lmdb.NoReadahead
+		return (flags | lmdb.Readonly) ^ lmdb.NoReadahead
 	}).MustOpen()
 	dst := ethdb.NewMDBX().Path(to).Flags(func(flags uint) uint {
 		return flags | mdbx.WriteMap | mdbx.NoMemInit
@@ -306,7 +306,7 @@ func toMdbx(ctx context.Context, from, to string) error {
 		return err1
 	}
 	defer srcTx.Rollback()
-	dstTx, err1 := dst.Begin(ctx, nil, ethdb.RW)
+	dstTx, err1 := dst.Begin(ctx, nil, ethdb.RW|ethdb.NoSync)
 	if err1 != nil {
 		return err1
 	}
@@ -323,21 +323,28 @@ func toMdbx(ctx context.Context, from, to string) error {
 		}
 
 		c := dstTx.Cursor(name)
-		appendFunc := c.Append
-		if b.Flags&dbutils.DupSort != 0 && !b.AutoDupSortKeysConversion {
-			appendFunc = c.(ethdb.CursorDupSort).AppendDup
-		} else if b.Flags&dbutils.DupFixed != 0 && !b.AutoDupSortKeysConversion {
-			appendFunc = c.(ethdb.CursorDupFixed).AppendDup
-		}
-
 		srcC := srcTx.Cursor(name)
+		var prevK []byte
 		for k, v, err := srcC.First(); k != nil; k, v, err = srcC.Next() {
 			if err != nil {
 				return err
 			}
 
-			if err = appendFunc(k, v); err != nil {
-				return err
+			if casted, ok := c.(ethdb.CursorDupSort); ok {
+				if bytes.Equal(k, prevK) {
+					if err = casted.AppendDup(k, v); err != nil {
+						return err
+					}
+				} else {
+					if err = casted.Append(k, v); err != nil {
+						return err
+					}
+				}
+				prevK = k
+			} else {
+				if err = casted.Append(k, v); err != nil {
+					return err
+				}
 			}
 
 			select {
@@ -349,19 +356,14 @@ func toMdbx(ctx context.Context, from, to string) error {
 				if err2 := dstTx.Commit(ctx); err2 != nil {
 					return err2
 				}
-				dstTx, err = dst.Begin(ctx, nil, ethdb.RW)
+				dstTx, err = dst.Begin(ctx, nil, ethdb.RW|ethdb.NoSync)
 				if err != nil {
 					return err
 				}
 				c = dstTx.Cursor(name)
-				appendFunc = c.Append
-				if b.Flags&dbutils.DupSort != 0 && !b.AutoDupSortKeysConversion {
-					appendFunc = c.(ethdb.CursorDupSort).AppendDup
-				} else if b.Flags&dbutils.DupFixed != 0 && !b.AutoDupSortKeysConversion {
-					appendFunc = c.(ethdb.CursorDupFixed).AppendDup
-				}
 			}
 		}
+		prevK = nil
 
 		// migrate bucket sequences to native mdbx implementation
 		currentID, err := srcTx.Sequence(name, 0)
