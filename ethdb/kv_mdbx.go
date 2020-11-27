@@ -138,7 +138,7 @@ func (opts MdbxOpts) Open() (KV, error) {
 	var flags = opts.flags
 	if opts.inMem {
 		flags ^= mdbx.Durable
-		flags |= mdbx.NoMetaSync | mdbx.SafeNoSync
+		flags |= mdbx.SafeNoSync
 	}
 
 	err = env.Open(opts.path, flags, 0664)

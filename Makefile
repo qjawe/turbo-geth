@@ -110,7 +110,7 @@ ethdb/mdbx/dist/libmdbx.a:
 		&& CFLAGS_EXTRA="-Wno-deprecated-declarations" make libmdbx.a
 
 test: ethdb/mdbx/dist/libmdbx.a
-	$(GOTEST)
+	TEST_DB=mdbx $(GOTEST)
 
 test-lmdb:
 	TEST_DB=lmdb $(GOTEST)
