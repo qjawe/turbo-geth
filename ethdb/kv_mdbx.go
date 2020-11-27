@@ -612,7 +612,7 @@ func (tx *mdbxTx) Commit(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	if latency.Whole > 1*time.Second {
+	if latency.Whole > 20*time.Second {
 		log.Info("Commit", "preparation", latency.Preparation, "gc", latency.GC, "audit", latency.Audit, "write", latency.Write, "fsync", latency.Sync, "ending", latency.Ending, "whole", latency.Whole)
 	}
 
