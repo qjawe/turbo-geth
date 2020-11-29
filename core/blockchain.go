@@ -2254,7 +2254,13 @@ func InsertBodies(
 		return true, nil
 	}
 
-	batch := db.NewBatch()
+	tx, errBegin := db.Begin(context.Background(), ethdb.RW)
+	if errBegin != nil {
+		return true, errBegin
+	}
+	defer tx.Rollback()
+
+	batch := tx.NewBatch()
 	stats := InsertStats{StartTime: mclock.Now()}
 
 	var parentNumber = chain[0].NumberU64() - 1
@@ -2304,8 +2310,11 @@ func InsertBodies(
 	}
 	stats.Processed = len(chain)
 	stats.Report(logPrefix, chain, len(chain)-1, true)
-	rawdb.WriteHeadBlockHash(db, chain[len(chain)-1].Hash())
+	rawdb.WriteHeadBlockHash(tx, chain[len(chain)-1].Hash())
 	if _, err := batch.Commit(); err != nil {
+		return true, fmt.Errorf("commit inserting bodies: %w", err)
+	}
+	if _, err := tx.Commit(); err != nil {
 		return true, fmt.Errorf("commit inserting bodies: %w", err)
 	}
 	return false, nil
