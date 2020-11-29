@@ -2249,6 +2249,10 @@ func InsertBodies(
 	committedBlock *atomic.Value,
 	badBlocks *lru.Cache,
 ) (bool, error) {
+	if common.IsCanceled(ctx) {
+		return true, ctx.Err()
+	}
+
 	// If the chain is terminating, don't even bother starting u
 	if atomic.LoadInt32(procInterrupt) == 1 {
 		return true, nil
@@ -2291,10 +2295,6 @@ func InsertBodies(
 		}
 
 		// Irrelevant of the canonical status, write the block itself to the database
-		if common.IsCanceled(ctx) {
-			return true, ctx.Err()
-		}
-
 		err = rawdb.WriteBody(batch, block.Hash(), block.NumberU64(), block.Body())
 		if err != nil {
 			return true, err
