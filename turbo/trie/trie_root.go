@@ -570,9 +570,6 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 			if err != nil {
 				return EmptyRoot, err
 			}
-			if bytes.Equal(l.kHex, common.FromHex("0a010d0c050203070e0f0c060d030e08000402080705000607060201050d0e05000f0e090807040007050b0e04000a090007070007070c080104010506050e05")) {
-				fmt.Printf("a: %x, %x\n", l.ihKStorage, ihStorage.parents[ihStorage.i])
-			}
 			for {
 				if err := common.Stopped(quit); err != nil {
 					return EmptyRoot, err
