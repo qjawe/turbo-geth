@@ -918,7 +918,7 @@ func TestIHCursor(t *testing.T) {
 	db := ethdb.NewMemDatabase()
 	defer db.Close()
 	acc := fmt.Sprintf("0101%0124x", 0) + fmt.Sprintf("%030x01", 0)
-	for _, k := range []string{"00", "01", "0100", "0101", "0102", "02", acc, acc + "00", acc + "01", acc + "02"} {
+	for _, k := range []string{"00", "0001", "01", "0100", "0101", "0102", "02", acc, acc + "00", acc + "01", acc + "02"} {
 		kk := common.FromHex(k)
 		kk = append(append([]byte{}, uint8(len(kk))), kk...)
 		db.Put(dbutils.IntermediateTrieHashBucket3, kk, kk)

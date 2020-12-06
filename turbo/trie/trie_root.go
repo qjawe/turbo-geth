@@ -575,7 +575,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 					continue
 				}
 
-				nextHex2, _ := dbutils.NextSubtreeHex(ih.PrevKey())
+				nextHex2, _ := dbutils.NextSubtreeHex(ihStorage.PrevKey())
 				cmpBits2 := len(nextHex2) * 8
 				if len(nextHex2)%2 == 1 {
 					nextHex2 = append(nextHex2, 0)
@@ -583,7 +583,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 				next2 := make([]byte, len(nextHex2)/2)
 				CompressNibbles(nextHex2, &next2)
 
-				if err = ethdb.Walk(accsC, next2, cmpBits2, func(k, v []byte) (bool, error) {
+				if err = ethdb.Walk(storageC, next2, cmpBits2, func(k, v []byte) (bool, error) {
 					l.k, l.v = k, v
 					DecompressNibbles(l.k, &l.kHex)
 					l.itemType = StorageStreamItem
