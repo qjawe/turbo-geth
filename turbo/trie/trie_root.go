@@ -530,37 +530,40 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 		}
 
 		nextHex, _ := dbutils.NextSubtreeHex(ih.PrevKey())
-		cmpBits := len(nextHex) * 8
 		if len(nextHex)%2 == 1 {
 			nextHex = append(nextHex, 0)
 		}
 		next := make([]byte, len(nextHex)/2)
 		CompressNibbles(nextHex, &next)
 
-		if err = ethdb.Walk(accsC, next, cmpBits, func(k, v []byte) (bool, error) {
-			//fmt.Printf("22: %x\n", k)
-			l.k, l.v = k, v
-			DecompressNibbles(l.k, &l.kHex)
+		for l.k, l.kHex, l.v, err = accs.Seek(next); l.k != nil; l.k, l.kHex, l.v, err = accs.Next() {
+			if err != nil {
+				return EmptyRoot, err
+			}
+			if keyIsBefore(l.ihK, l.kHex) { // read all accounts until next IH
+				break
+			}
+
 			l.itemType = AccountStreamItem
 			l.accountKey = common.CopyBytes(l.kHex)
 			l.storageKey = nil
 			l.storageValue = nil
 			l.hashValue = nil
 			if err = l.accountValue.DecodeForStorage(l.v); err != nil {
-				return false, fmt.Errorf("fail DecodeForStorage: %w", err)
+				return EmptyRoot, fmt.Errorf("fail DecodeForStorage: %w", err)
 			}
 			copy(l.accAddrHashWithInc[:], l.k)
 			binary.BigEndian.PutUint64(l.accAddrHashWithInc[32:], l.accountValue.Incarnation)
 			if err = l.receiver.Receive(l.itemType, l.accountKey, l.storageKey, &l.accountValue, l.storageValue, l.hashValue, 0); err != nil {
-				return false, err
+				return EmptyRoot, err
 			}
 			l.ihKStorage, l.ihVStorage, isIHSequence, err = ihStorage.SeekToAccount(l.accAddrHashWithInc[:])
 			if err != nil {
-				return false, err
+				return EmptyRoot, err
 			}
 			for {
 				if err := common.Stopped(quit); err != nil {
-					return false, err
+					return EmptyRoot, err
 				}
 				if isIHSequence {
 					l.itemType = SHashStreamItem
@@ -569,36 +572,35 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 					l.hashValue = l.ihVStorage
 					l.storageValue = nil
 					if err := l.receiver.Receive(l.itemType, l.accountKey, l.storageKey, &l.accountValue, l.storageValue, l.hashValue, 0); err != nil {
-						return false, err
+						return EmptyRoot, err
 					}
 					l.ihKStorage, l.ihVStorage, isIHSequence, err = ihStorage.Next()
 					continue
 				}
 
 				nextHex2, _ := dbutils.NextSubtreeHex(ihStorage.PrevKey())
-				cmpBits2 := len(nextHex2) * 8
 				if len(nextHex2)%2 == 1 {
 					nextHex2 = append(nextHex2, 0)
 				}
 				next2 := make([]byte, len(nextHex2)/2)
 				CompressNibbles(nextHex2, &next2)
+				for l.k, l.kHex, l.v, err = storages.Seek(next); l.k != nil; l.k, l.kHex, l.v, err = storages.Next() {
+					if err != nil {
+						return EmptyRoot, err
+					}
+					if keyIsBefore(l.ihK, l.kHex) { // read all accounts until next IH
+						break
+					}
 
-				if err = ethdb.Walk(storageC, next2, cmpBits2, func(k, v []byte) (bool, error) {
-					l.k, l.v = k, v
-					DecompressNibbles(l.k, &l.kHex)
 					l.itemType = StorageStreamItem
 					l.accountKey = nil
 					l.storageKey = common.CopyBytes(l.kHex) // no reason to copy, because this "pointer and data" will valid until end of transaction
 					l.hashValue = nil
 					l.storageValue = common.CopyBytes(l.v)
 					if err := l.receiver.Receive(l.itemType, l.accountKey, l.storageKey, &l.accountValue, l.storageValue, l.hashValue, 0); err != nil {
-						return false, err
+						return EmptyRoot, err
 					}
-					return true, nil
-				}); err != nil {
-					return false, err
 				}
-
 				if len(l.ihKStorage) == 0 { // Loop termination
 					break
 				}
@@ -609,19 +611,15 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 				l.hashValue = l.ihVStorage
 				l.storageValue = nil
 				if err := l.receiver.Receive(l.itemType, l.accountKey, l.storageKey, &l.accountValue, l.storageValue, l.hashValue, 0); err != nil {
-					return false, err
-
+					return EmptyRoot, err
 				}
 				l.ihKStorage, l.ihVStorage, isIHSequence, err = ihStorage.Next()
 				if err != nil {
-					return false, err
+					return EmptyRoot, err
 				}
 			}
-			return true, nil
 			//fmt.Printf("Before storage loop: %x, %x\n", l.ihK, l.accAddrHashWithInc)
 			//fmt.Printf("After storage loop: %x, %x\n", l.ihK, l.accAddrHashWithInc)
-		}); err != nil {
-			return EmptyRoot, err
 		}
 
 		if len(l.ihK) == 0 { // Loop termination
@@ -725,6 +723,7 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 	hash []byte,
 	cutoff int,
 ) error {
+	fmt.Printf("1: %d, %x, %x\n", itemType, accountKey, storageKey)
 	switch itemType {
 	case StorageStreamItem:
 		r.advanceKeysStorage(storageKey, true /* terminator */)
@@ -1016,11 +1015,11 @@ func (c *IHCursor) First() (k, v []byte, isSeq bool, err error) {
 	if err != nil {
 		return []byte{}, nil, false, err
 	}
+	c.prev = c.cur
 
 	if k == nil {
 		return nil, nil, false, nil
 	}
-	c.prev = c.cur
 	c.cur = common.CopyBytes(k[1:])
 	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
 }
@@ -1030,11 +1029,11 @@ func (c *IHCursor) Next() (k, v []byte, isSeq bool, err error) {
 	if err != nil {
 		return []byte{}, nil, false, err
 	}
+	c.prev = c.cur
 
 	if k == nil {
 		return nil, nil, false, nil
 	}
-	c.prev = c.cur
 	c.cur = common.CopyBytes(k[1:])
 	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
 }
@@ -1152,11 +1151,11 @@ func (c *IHStorageCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, e
 	if err != nil {
 		return []byte{}, nil, false, err
 	}
+	c.prev = c.cur
 
 	if k == nil {
 		return nil, nil, false, nil
 	}
-	c.prev = c.cur
 	c.cur = common.CopyBytes(k[1:])
 	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
 }
@@ -1210,12 +1209,12 @@ func (c *IHStorageCursor) Next() (k, v []byte, isSeq bool, err error) {
 	if err != nil {
 		return []byte{}, nil, false, err
 	}
+	c.prev = c.cur
 
 	if k == nil {
 		return nil, nil, false, nil
 	}
 
-	c.prev = c.cur
 	c.cur = common.CopyBytes(k[1:])
 	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
 }

@@ -907,6 +907,7 @@ func TestNextSubtreeHex(t *testing.T) {
 		{prev: "01020f0f", next: "0103", expect: true},
 		{prev: "01020f0f", next: "0103000000000000", expect: true},
 		{prev: "01020304", next: "05060708", expect: false},
+		{prev: "0f0f0d", next: "0f0f0e", expect: true},
 	}
 
 	for _, tc := range cases {
