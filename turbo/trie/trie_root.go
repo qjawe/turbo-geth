@@ -516,6 +516,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 		if err := common.Stopped(quit); err != nil {
 			return EmptyRoot, err
 		}
+
 		if isIHSequence {
 			l.itemType = AHashStreamItem
 			l.accountKey = l.ihK
@@ -535,6 +536,9 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 		}
 		next := make([]byte, len(nextHex)/2)
 		CompressNibbles(nextHex, &next)
+		if len(ih.PrevKey()) > 0 && len(next) == 0 {
+			break
+		}
 
 		for l.k, l.kHex, l.v, err = accs.Seek(next); l.k != nil; l.k, l.kHex, l.v, err = accs.Next() {
 			if err != nil {
@@ -557,9 +561,17 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 			if err = l.receiver.Receive(l.itemType, l.accountKey, l.storageKey, &l.accountValue, l.storageValue, l.hashValue, 0); err != nil {
 				return EmptyRoot, err
 			}
-			l.ihKStorage, l.ihVStorage, isIHSequence, err = ihStorage.SeekToAccount(l.accAddrHashWithInc[:])
+			if l.accountValue.Incarnation == 0 {
+				continue
+			}
+
+			DecompressNibbles(l.accAddrHashWithInc[:], &l.ihSeek)
+			l.ihKStorage, l.ihVStorage, isIHSequence, err = ihStorage.SeekToAccount(l.ihSeek)
 			if err != nil {
 				return EmptyRoot, err
+			}
+			if bytes.Equal(l.kHex, common.FromHex("0a010d0c050203070e0f0c060d030e08000402080705000607060201050d0e05000f0e090807040007050b0e04000a090007070007070c080104010506050e05")) {
+				fmt.Printf("a: %x, %x\n", l.ihKStorage, ihStorage.parents[ihStorage.i])
 			}
 			for {
 				if err := common.Stopped(quit); err != nil {
@@ -578,25 +590,34 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 					continue
 				}
 
-				nextHex2, _ := dbutils.NextSubtreeHex(ihStorage.PrevKey())
-				if len(nextHex2)%2 == 1 {
-					nextHex2 = append(nextHex2, 0)
-				}
-				next2 := make([]byte, len(nextHex2)/2)
-				CompressNibbles(nextHex2, &next2)
-				for l.k, l.kHex, l.v, err = storages.Seek(next); l.k != nil; l.k, l.kHex, l.v, err = storages.Next() {
-					if err != nil {
-						return EmptyRoot, err
+				var next2 []byte
+				if len(ihStorage.PrevKey()) == 0 {
+					next2 = l.accAddrHashWithInc[:]
+				} else {
+					nextHex2, _ := dbutils.NextSubtreeHex(ihStorage.PrevKey())
+					if len(nextHex2)%2 == 1 {
+						nextHex2 = append(nextHex2, 0)
 					}
-					if keyIsBefore(l.ihK, l.kHex) { // read all accounts until next IH
+					next2 = make([]byte, len(nextHex2)/2)
+					CompressNibbles(nextHex2, &next2)
+				}
+
+				if len(ihStorage.PrevKey()) > 0 && len(next2) == 0 {
+					break
+				}
+				for k, kHex, v, err3 := storages.Seek(next2); k != nil; k, kHex, v, err3 = storages.Next() {
+					if err3 != nil {
+						return EmptyRoot, err3
+					}
+					if keyIsBefore(l.ihKStorage, kHex) { // read all accounts until next IH
 						break
 					}
 
 					l.itemType = StorageStreamItem
 					l.accountKey = nil
-					l.storageKey = common.CopyBytes(l.kHex) // no reason to copy, because this "pointer and data" will valid until end of transaction
+					l.storageKey = common.CopyBytes(kHex) // no reason to copy, because this "pointer and data" will valid until end of transaction
 					l.hashValue = nil
-					l.storageValue = common.CopyBytes(l.v)
+					l.storageValue = common.CopyBytes(v)
 					if err := l.receiver.Receive(l.itemType, l.accountKey, l.storageKey, &l.accountValue, l.storageValue, l.hashValue, 0); err != nil {
 						return EmptyRoot, err
 					}
@@ -723,7 +744,7 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 	hash []byte,
 	cutoff int,
 ) error {
-	fmt.Printf("1: %d, %x, %x\n", itemType, accountKey, storageKey)
+	//fmt.Printf("1: %d, %x, %x\n", itemType, accountKey, storageKey)
 	switch itemType {
 	case StorageStreamItem:
 		r.advanceKeysStorage(storageKey, true /* terminator */)
