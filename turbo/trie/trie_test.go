@@ -902,14 +902,15 @@ func TestNextSubtreeHex(t *testing.T) {
 	}
 
 	cases := []tc{
-		{prev: "1234", next: "1235", expect: true},
-		{prev: "12ff", next: "13", expect: true},
-		{prev: "12ff", next: "13000000", expect: true},
-		{prev: "1234", next: "5678", expect: false},
+		{prev: "00", next: "01", expect: true},
+		{prev: "01020304", next: "01020305", expect: true},
+		{prev: "01020f0f", next: "0103", expect: true},
+		{prev: "01020f0f", next: "0103000000000000", expect: true},
+		{prev: "01020304", next: "05060708", expect: false},
 	}
+
 	for _, tc := range cases {
-		next, _ := NextIH(common.FromHex(tc.prev))
-		res := isSequence(next, common.FromHex(tc.next))
+		res := isSequence(common.FromHex(tc.prev), common.FromHex(tc.next))
 		assert.Equal(tc.expect, res, "%s, %s", tc.prev, tc.next)
 	}
 }
@@ -974,4 +975,5 @@ func TestIHCursor(t *testing.T) {
 	fmt.Printf("12: %x, %t\n", k, isSeq)
 	k, _, isSeq, _ = ihStorage.Next()
 	fmt.Printf("13: %x, %t\n", k, isSeq)
+
 }

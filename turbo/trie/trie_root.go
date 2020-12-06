@@ -683,18 +683,6 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 	return l.receiver.Root(), nil
 }
 
-func NextIH(in []byte) ([]byte, bool) {
-	r := make([]byte, len(in))
-	copy(r, in)
-	for i := len(r) - 1; i >= 0; i-- {
-		if r[i] != 15 {
-			r[i]++
-			return r, true
-		}
-	}
-	return nil, false
-}
-
 func (l *FlatDBTrieLoader) logProgress() {
 	var k string
 	if l.accountKey != nil {
@@ -1007,6 +995,7 @@ type IHCursor struct {
 	filter     Filter
 	i          int
 	prev       []byte
+	cur        []byte
 	buf        []byte
 	parents    [161][]byte
 	accWithInc []byte
@@ -1019,10 +1008,7 @@ func IH(f Filter, c [161]ethdb.Cursor) *IHCursor {
 }
 
 func (c *IHCursor) PrevKey() []byte {
-	if len(c.prev) == 0 {
-		return nil
-	}
-	return c.prev[1:]
+	return c.prev
 }
 
 func (c *IHCursor) First() (k, v []byte, isSeq bool, err error) {
@@ -1034,8 +1020,9 @@ func (c *IHCursor) First() (k, v []byte, isSeq bool, err error) {
 	if k == nil {
 		return nil, nil, false, nil
 	}
-
-	return common.CopyBytes(k[1:]), common.CopyBytes(v), isSequence(c.prev[1:], k[1:]), nil
+	c.prev = c.cur
+	c.cur = common.CopyBytes(k[1:])
+	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
 }
 
 func (c *IHCursor) Next() (k, v []byte, isSeq bool, err error) {
@@ -1047,8 +1034,9 @@ func (c *IHCursor) Next() (k, v []byte, isSeq bool, err error) {
 	if k == nil {
 		return nil, nil, false, nil
 	}
-
-	return common.CopyBytes(k[1:]), common.CopyBytes(v), isSequence(c.prev[1:], k[1:]), nil
+	c.prev = c.cur
+	c.cur = common.CopyBytes(k[1:])
+	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
 }
 
 func (c *IHCursor) _first() (k, v []byte, err error) {
@@ -1074,7 +1062,6 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 
 		// if filter allow us, return. otherwise delete and go level-down
 		if c.filter(k[1:]) {
-			c.prev = common.CopyBytes(k)
 			return k, v, nil
 		}
 
@@ -1117,7 +1104,6 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 
 		// if filter allow us, return. otherwise delete and go level-down
 		if c.filter(k[1:]) {
-			c.prev = common.CopyBytes(k)
 			return k, v, nil
 		}
 
@@ -1143,6 +1129,7 @@ type IHStorageCursor struct {
 	filter     Filter
 	i          int
 	prev       []byte
+	cur        []byte
 	buf        []byte
 	parents    [161][]byte
 	accWithInc []byte
@@ -1155,10 +1142,7 @@ func IHStorage(f Filter, c [161]ethdb.Cursor) *IHStorageCursor {
 }
 
 func (c *IHStorageCursor) PrevKey() []byte {
-	if len(c.prev) == 0 {
-		return nil
-	}
-	return c.prev[1:]
+	return c.prev
 }
 
 func (c *IHStorageCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, err error) {
@@ -1172,8 +1156,9 @@ func (c *IHStorageCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, e
 	if k == nil {
 		return nil, nil, false, nil
 	}
-
-	return common.CopyBytes(k[1:]), common.CopyBytes(v), isSequence(c.prev[1:], k[1:]), nil
+	c.prev = c.cur
+	c.cur = common.CopyBytes(k[1:])
+	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
 }
 
 func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
@@ -1199,7 +1184,6 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 
 		// if filter allow us, return. otherwise delete and go level-down
 		if c.filter(k[1:]) {
-			c.prev = common.CopyBytes(k)
 			return k, v, nil
 		}
 
@@ -1231,7 +1215,9 @@ func (c *IHStorageCursor) Next() (k, v []byte, isSeq bool, err error) {
 		return nil, nil, false, nil
 	}
 
-	return common.CopyBytes(k[1:]), common.CopyBytes(v), isSequence(c.prev[1:], k[1:]), nil
+	c.prev = c.cur
+	c.cur = common.CopyBytes(k[1:])
+	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
 }
 
 func (c *IHStorageCursor) _next() (k, v []byte, err error) {
@@ -1257,7 +1243,6 @@ func (c *IHStorageCursor) _next() (k, v []byte, err error) {
 
 		// if filter allow us, return. otherwise delete and go level-down
 		if c.filter(k[1:]) {
-			c.prev = common.CopyBytes(k)
 			return k, v, nil
 		}
 
@@ -1292,6 +1277,11 @@ func (c *IHStorageCursor) _next() (k, v []byte, err error) {
 */
 func isSequence(prev []byte, next []byte) bool {
 	isSequence := false
+	var ok bool
+	prev, ok = dbutils.NextSubtreeHex(prev)
+	if !ok {
+		return true
+	}
 	if bytes.HasPrefix(next, prev) {
 		tail := next[len(prev):] // if tail has only zeroes, then no state records can be between fstl.nextHex and fstl.ihK
 		isSequence = true
