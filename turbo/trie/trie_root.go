@@ -599,6 +599,10 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 					return false, err
 				}
 
+				if len(l.ihKStorage) == 0 { // Loop termination
+					break
+				}
+
 				l.itemType = SHashStreamItem
 				l.accountKey = nil
 				l.storageKey = l.ihKStorage
@@ -606,16 +610,12 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 				l.storageValue = nil
 				if err := l.receiver.Receive(l.itemType, l.accountKey, l.storageKey, &l.accountValue, l.storageValue, l.hashValue, 0); err != nil {
 					return false, err
+
 				}
 				l.ihKStorage, l.ihVStorage, isIHSequence, err = ihStorage.Next()
 				if err != nil {
 					return false, err
 				}
-
-				if len(l.ihKStorage) == 0 { // Loop termination
-					break
-				}
-
 			}
 			return true, nil
 			//fmt.Printf("Before storage loop: %x, %x\n", l.ihK, l.accAddrHashWithInc)
@@ -623,25 +623,23 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 		}); err != nil {
 			return EmptyRoot, err
 		}
-		if len(l.ihK) > 0 {
-			l.itemType = AHashStreamItem
-			l.accountKey = l.ihK
-			l.storageKey = nil
-			l.storageValue = nil
-			l.hashValue = l.ihV
-			if err := l.receiver.Receive(l.itemType, l.accountKey, l.storageKey, &l.accountValue, l.storageValue, l.hashValue, 0); err != nil {
-				return EmptyRoot, err
-			}
-			l.ihK, l.ihV, isIHSequence, err = ih.Next()
-			if err != nil {
-				return EmptyRoot, err
-			}
-		}
 
 		if len(l.ihK) == 0 { // Loop termination
 			break
 		}
 
+		l.itemType = AHashStreamItem
+		l.accountKey = l.ihK
+		l.storageKey = nil
+		l.storageValue = nil
+		l.hashValue = l.ihV
+		if err := l.receiver.Receive(l.itemType, l.accountKey, l.storageKey, &l.accountValue, l.storageValue, l.hashValue, 0); err != nil {
+			return EmptyRoot, err
+		}
+		l.ihK, l.ihV, isIHSequence, err = ih.Next()
+		if err != nil {
+			return EmptyRoot, err
+		}
 		select {
 		default:
 		case <-logEvery.C:
