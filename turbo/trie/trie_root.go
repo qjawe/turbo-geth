@@ -602,6 +602,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 				if len(ihStorage.PrevKey()) > 0 && len(next2) == 0 {
 					break
 				}
+
 				for k, kHex, v, err3 := storages.Seek(next2); k != nil; k, kHex, v, err3 = storages.Next() {
 					if err3 != nil {
 						return EmptyRoot, err3
@@ -1229,7 +1230,6 @@ func (c *IHStorageCursor) Next() (k, v []byte, isSeq bool, err error) {
 		return []byte{}, nil, false, err
 	}
 	c.prev = c.cur
-
 	if k == nil {
 		return nil, nil, false, nil
 	}

@@ -921,6 +921,7 @@ func (c *LmdbCursor) Seek(seek []byte) (k, v []byte, err error) {
 	}
 	if err != nil {
 		if lmdb.IsNotFound(err) {
+			k, v = nil, nil
 			return nil, nil, nil
 		}
 		err = fmt.Errorf("failed LmdbKV cursor.Seek(): %w, bucket: %s,  key: %x", err, c.bucketName, seek)
