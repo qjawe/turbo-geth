@@ -519,10 +519,10 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 
 		if isIHSequence {
 			l.itemType = AHashStreamItem
-			l.accountKey = l.ihK
+			l.accountKey = common.CopyBytes(l.ihK)
 			l.storageKey = nil
 			l.storageValue = nil
-			l.hashValue = l.ihV
+			l.hashValue = common.CopyBytes(l.ihV)
 			if err := l.receiver.Receive(l.itemType, l.accountKey, l.storageKey, &l.accountValue, l.storageValue, l.hashValue, 0); err != nil {
 				return EmptyRoot, err
 			}
@@ -577,8 +577,8 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 				if isIHSequence {
 					l.itemType = SHashStreamItem
 					l.accountKey = nil
-					l.storageKey = l.ihKStorage
-					l.hashValue = l.ihVStorage
+					l.storageKey = common.CopyBytes(l.ihKStorage)
+					l.hashValue = common.CopyBytes(l.ihVStorage)
 					l.storageValue = nil
 					if err := l.receiver.Receive(l.itemType, l.accountKey, l.storageKey, &l.accountValue, l.storageValue, l.hashValue, 0); err != nil {
 						return EmptyRoot, err
@@ -629,8 +629,8 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 
 				l.itemType = SHashStreamItem
 				l.accountKey = nil
-				l.storageKey = l.ihKStorage
-				l.hashValue = l.ihVStorage
+				l.storageKey = common.CopyBytes(l.ihKStorage)
+				l.hashValue = common.CopyBytes(l.ihVStorage)
 				l.storageValue = nil
 				if err := l.receiver.Receive(l.itemType, l.accountKey, l.storageKey, &l.accountValue, l.storageValue, l.hashValue, 0); err != nil {
 					return EmptyRoot, err
@@ -745,7 +745,7 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 	hash []byte,
 	cutoff int,
 ) error {
-	//fmt.Printf("1: %d, %x, %x\n", itemType, accountKey, storageKey)
+	//fmt.Printf("1: %d, %x, %x, %x, %x\n", itemType, accountKey, storageKey, hash, storageValue)
 	switch itemType {
 	case StorageStreamItem:
 		r.advanceKeysStorage(storageKey, true /* terminator */)
