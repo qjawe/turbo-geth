@@ -1124,22 +1124,16 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 			continue
 		}
 
-		// if filter allow us, return. otherwise delete and go level-down
+		// if filter allow us, return. otherwise go level-down
 		if c.filter(k[1:]) {
 			return k, v, nil
 		}
 
-		k = common.CopyBytes(k)
-		err = cursor.DeleteCurrent()
-		if err != nil {
-			return []byte{}, nil, err
-		}
 		c.i++
 		c.parents[c.i] = k[1:]
 		cursor = c.c[c.i]
 		c.buf = append(append(c.buf[:0], uint8(c.i)), c.parents[c.i]...)
 		k, v, err = cursor.Seek(c.buf)
-
 		if err != nil {
 			return []byte{}, nil, err
 		}
