@@ -1174,7 +1174,9 @@ func (c *IHStorageCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, e
 	if err != nil {
 		return []byte{}, nil, false, err
 	}
-	c.prev = c.cur
+	// important trick! reduce incarnation of .prev - then nextSubTree will work well
+	c.prev = common.CopyBytes(seek)
+	c.prev[len(c.prev)-1]--
 
 	if k == nil {
 		return nil, nil, false, nil
@@ -1185,7 +1187,7 @@ func (c *IHStorageCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, e
 
 func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 	cursor := c.c[c.i]
-	k, v, err = cursor.Seek(append([]byte{uint8(c.i)}, seek...))
+	k, v, err = cursor.SeekExact(append([]byte{uint8(c.i)}, seek...))
 	if err != nil {
 		return []byte{}, nil, err
 	}
