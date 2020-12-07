@@ -1037,13 +1037,13 @@ func (c *IHCursor) First() (k, v []byte, isSeq bool, err error) {
 	if err != nil {
 		return []byte{}, nil, false, err
 	}
-	c.prev = c.cur
+	c.prev = []byte{0} // important trick! isSequence can't work with zero-length input, but .First can't have .prev value. It's ok to check isSequence with 0 byte - if
 
 	if k == nil {
 		return nil, nil, false, nil
 	}
 	c.cur = common.CopyBytes(k[1:])
-	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
+	return c.cur, common.CopyBytes(v), isSequence([]byte{0}, c.cur), nil
 }
 
 func (c *IHCursor) Next() (k, v []byte, isSeq bool, err error) {
