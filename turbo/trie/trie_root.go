@@ -1037,7 +1037,8 @@ func (c *IHCursor) First() (k, v []byte, isSeq bool, err error) {
 	if err != nil {
 		return []byte{}, nil, false, err
 	}
-	c.prev = []byte{0} // important trick! isSequence can't work with zero-length input, but .First can't have .prev value. It's ok to check isSequence with 0 byte - if
+	// important trick! isSequence can't work with zero-length input, but .prev must be zero-len for main algo.
+	c.prev = []byte{}
 
 	if k == nil {
 		return nil, nil, false, nil
