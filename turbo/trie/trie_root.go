@@ -1111,6 +1111,8 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 	}
 
 	for {
+		// if a and b don't form sequence, then iterate over all keys between a and b
+
 		if k == nil || len(k)-1 > c.i || !bytes.HasPrefix(k[1:], c.parents[c.i]) {
 			if c.i == 1 {
 				return nil, nil, nil
