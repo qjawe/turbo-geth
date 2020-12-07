@@ -1134,6 +1134,7 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 		cursor = c.c[c.i]
 		c.buf = append(append(c.buf[:0], uint8(c.i)), c.parents[c.i]...)
 		k, v, err = cursor.Seek(c.buf)
+
 		if err != nil {
 			return []byte{}, nil, err
 		}
