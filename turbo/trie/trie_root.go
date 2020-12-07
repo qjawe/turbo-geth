@@ -607,6 +607,9 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 					if err3 != nil {
 						return EmptyRoot, err3
 					}
+					if !bytes.HasPrefix(k, l.accAddrHashWithInc[:]) {
+						break
+					}
 					if keyIsBefore(l.ihKStorage, kHex) { // read all accounts until next IH
 						break
 					}
