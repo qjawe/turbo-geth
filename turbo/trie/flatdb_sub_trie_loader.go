@@ -908,5 +908,21 @@ func (c *IHCursor2) Seek(seek []byte) ([]byte, []byte, bool, error) {
 		return k, v, false, nil
 	}
 
-	return k, v, isSequence(seek, k), nil
+	return k, v, isSequenceOld(seek, k), nil
+}
+
+func isSequenceOld(prev []byte, next []byte) bool {
+	isSequence := false
+	if bytes.HasPrefix(next, prev) {
+		tail := next[len(prev):] // if tail has only zeroes, then no state records can be between fstl.nextHex and fstl.ihK
+		isSequence = true
+		for _, n := range tail {
+			if n != 0 {
+				isSequence = false
+				break
+			}
+		}
+	}
+
+	return isSequence
 }

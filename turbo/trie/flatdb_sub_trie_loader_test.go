@@ -586,7 +586,7 @@ func TestIsSequence(t *testing.T) {
 	}
 	for _, tc := range cases {
 		next, _ := dbutils.NextSubtree(common.FromHex(tc.prev))
-		res := isSequence(next, common.FromHex(tc.next))
+		res := isSequenceOld(next, common.FromHex(tc.next))
 		assert.Equal(tc.expect, res, "%s, %s", tc.prev, tc.next)
 	}
 
