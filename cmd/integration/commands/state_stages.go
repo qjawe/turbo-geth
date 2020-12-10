@@ -14,7 +14,6 @@ import (
 	"github.com/ledgerwatch/turbo-geth/common/changeset"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
-	"github.com/ledgerwatch/turbo-geth/core"
 	"github.com/ledgerwatch/turbo-geth/core/state"
 	"github.com/ledgerwatch/turbo-geth/eth/stagedsync"
 	"github.com/ledgerwatch/turbo-geth/eth/stagedsync/stages"
@@ -218,8 +217,6 @@ func syncBySmallSteps(db ethdb.Database, ctx context.Context) error {
 }
 
 func loopIh(db ethdb.Database, ctx context.Context) error {
-	core.UsePlainStateExecution = true
-
 	ch := ctx.Done()
 
 	var tx ethdb.DbWithPendingMutations = ethdb.NewTxDbWithoutTransaction(db, ethdb.RW)
