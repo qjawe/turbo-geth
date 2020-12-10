@@ -63,32 +63,32 @@ func TestCopyDatabase(t *testing.T) {
 	doTestcase(t, map[string]testData{})
 
 	doTestcase(t, map[string]testData{
-		string(dbutils.CurrentStateBucketOld2): generateData(string(dbutils.CurrentStateBucketOld2)),
+		dbutils.CurrentStateBucketOld2: generateData(dbutils.CurrentStateBucketOld2),
 	})
 
 	doTestcase(t, map[string]testData{
-		string(dbutils.CodeBucket): generateData(string(dbutils.CodeBucket)),
+		dbutils.CodeBucket: generateData(dbutils.CodeBucket),
 	})
 
 	doTestcase(t, map[string]testData{
-		string(dbutils.CurrentStateBucketOld2): generateData(string(dbutils.CurrentStateBucketOld2)),
-		string(dbutils.CodeBucket):             generateData(string(dbutils.CodeBucket)),
+		dbutils.CurrentStateBucketOld2: generateData(dbutils.CurrentStateBucketOld2),
+		dbutils.CodeBucket:             generateData(dbutils.CodeBucket),
 	})
 
 	doTestcase(t, map[string]testData{
-		string(dbutils.CurrentStateBucketOld2): generateData(string(dbutils.CurrentStateBucketOld2)),
-		string(dbutils.CodeBucket):             generateData(string(dbutils.CodeBucket)),
+		dbutils.CurrentStateBucketOld2: generateData(dbutils.CurrentStateBucketOld2),
+		dbutils.CodeBucket:             generateData(dbutils.CodeBucket),
 	})
 
 	doTestcase(t, map[string]testData{
-		string(dbutils.CurrentStateBucketOld2): generateData(string(dbutils.CurrentStateBucketOld2)),
-		string(dbutils.CodeBucket):             generateData(string(dbutils.CodeBucket)),
+		dbutils.CurrentStateBucketOld2: generateData(dbutils.CurrentStateBucketOld2),
+		dbutils.CodeBucket:             generateData(dbutils.CodeBucket),
 	})
 
 	doTestcase(t, map[string]testData{
-		string(dbutils.CurrentStateBucketOld2): generateData(string(dbutils.CurrentStateBucketOld2)),
-		string(dbutils.CodeBucket):             generateData(string(dbutils.CodeBucket)),
-		string(dbutils.DatabaseInfoBucket):     generateData(string(dbutils.DatabaseInfoBucket)),
+		dbutils.CurrentStateBucketOld2: generateData(dbutils.CurrentStateBucketOld2),
+		dbutils.CodeBucket:             generateData(dbutils.CodeBucket),
+		dbutils.DatabaseInfoBucket:     generateData(dbutils.DatabaseInfoBucket),
 	})
 
 }
