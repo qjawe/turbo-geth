@@ -35,18 +35,18 @@ func TestDupSortHashState(t *testing.T) {
 
 	// test high-level data access didn't change
 	i := 0
-	err = db.Walk(dbutils.CurrentStateBucket, nil, 0, func(k, v []byte) (bool, error) {
+	err = db.Walk(dbutils.CurrentStateBucketOld2, nil, 0, func(k, v []byte) (bool, error) {
 		i++
 		return true, nil
 	})
 	require.NoError(err)
 	require.Equal(2, i)
 
-	v, err := db.Get(dbutils.CurrentStateBucket, []byte(accKey))
+	v, err := db.Get(dbutils.CurrentStateBucketOld2, []byte(accKey))
 	require.NoError(err)
 	require.Equal([]byte{1}, v)
 
-	v, err = db.Get(dbutils.CurrentStateBucket, []byte(storageKey))
+	v, err = db.Get(dbutils.CurrentStateBucketOld2, []byte(storageKey))
 	require.NoError(err)
 	require.Equal([]byte{2}, v)
 
@@ -54,7 +54,7 @@ func TestDupSortHashState(t *testing.T) {
 	require.NoError(err)
 	defer tx.Rollback()
 
-	c := tx.(ethdb.HasTx).Tx().CursorDupSort(dbutils.CurrentStateBucket)
+	c := tx.(ethdb.HasTx).Tx().CursorDupSort(dbutils.CurrentStateBucketOld2)
 	// test low-level data layout
 	require.NoError(err)
 

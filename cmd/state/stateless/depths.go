@@ -21,7 +21,7 @@ func countDepths() {
 	var prev [32]byte
 	count := 0
 	if err := db.KV().View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.CurrentStateBucket)
+		c := tx.Cursor(dbutils.CurrentStateBucketOld2)
 		for k, _, err := c.First(); k != nil; k, _, err = c.Next() {
 			if err != nil {
 				return err
@@ -119,7 +119,7 @@ func countStorageDepths() {
 	var filtered int
 	count := 0
 	if err := db.KV().View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.CurrentStateBucket)
+		c := tx.Cursor(dbutils.CurrentStateBucketOld2)
 		for k, _, err := c.First(); k != nil; k, _, err = c.Next() {
 			if err != nil {
 				return err
@@ -131,7 +131,7 @@ func countStorageDepths() {
 			sameAddr := bytes.Equal(addr, prevAddr[:])
 			if !sameAddr {
 				copy(prevAddr[:], addr)
-				v, err := tx.GetOne(dbutils.CurrentStateBucket, crypto.Keccak256(addr[:]))
+				v, err := tx.GetOne(dbutils.CurrentStateBucketOld2, crypto.Keccak256(addr[:]))
 				if err != nil {
 					return err
 				}

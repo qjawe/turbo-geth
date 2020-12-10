@@ -1099,7 +1099,7 @@ func storageUsage() {
 	count := 0
 	var leafSize uint64
 	if err := db.KV().View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.CurrentStateBucket)
+		c := tx.Cursor(dbutils.CurrentStateBucketOld2)
 		for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 			if err != nil {
 				return err
@@ -1110,7 +1110,7 @@ func storageUsage() {
 			copy(addr[:], k[:20])
 			del, ok := deleted[addr]
 			if !ok {
-				vv, err := tx.GetOne(dbutils.CurrentStateBucket, crypto.Keccak256(addr[:]))
+				vv, err := tx.GetOne(dbutils.CurrentStateBucketOld2, crypto.Keccak256(addr[:]))
 				if err != nil {
 					return err
 				}
@@ -1214,7 +1214,7 @@ func tokenUsage() {
 	//itemsByCreator := make(map[common.Address]int)
 	count := 0
 	if err := db.KV().View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.CurrentStateBucket)
+		c := tx.Cursor(dbutils.CurrentStateBucketOld2)
 		for k, _, err := c.First(); k != nil; k, _, err = c.Next() {
 			if err != nil {
 				return err
@@ -1292,7 +1292,7 @@ func nonTokenUsage() {
 	//itemsByCreator := make(map[common.Address]int)
 	count := 0
 	if err := db.KV().View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.CurrentStateBucket)
+		c := tx.Cursor(dbutils.CurrentStateBucketOld2)
 		for k, _, err := c.First(); k != nil; k, _, err = c.Next() {
 			if err != nil {
 				return err
@@ -1353,7 +1353,7 @@ func oldStorage() {
 	itemsByAddress := make(map[common.Address]int)
 	count := 0
 	if err := db.View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.CurrentStateBucket)
+		c := tx.Cursor(dbutils.CurrentStateBucketOld2)
 		for k, _, err := c.First(); k != nil; k, _, err = c.Next() {
 			if err != nil {
 				return err
@@ -1430,7 +1430,7 @@ func dustEOA() {
 	thresholdMap := make(map[uint64]int)
 	var a accounts.Account
 	if err := db.KV().View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.CurrentStateBucket)
+		c := tx.Cursor(dbutils.CurrentStateBucketOld2)
 		for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 			if err != nil {
 				return err

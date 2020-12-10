@@ -798,7 +798,7 @@ func TestDatabaseStateChangeDBSizeDebug(t *testing.T) {
 	stats := BucketsStats{}
 
 	fmt.Println("==========================ACCOUNT===========================")
-	err = db.Walk(dbutils.CurrentStateBucket, []byte{}, 0, func(k []byte, v []byte) (b bool, e error) {
+	err = db.Walk(dbutils.CurrentStateBucketOld2, []byte{}, 0, func(k []byte, v []byte) (b bool, e error) {
 		if len(k) > 32 {
 			return true, nil
 		}
@@ -824,7 +824,7 @@ func TestDatabaseStateChangeDBSizeDebug(t *testing.T) {
 	}
 
 	fmt.Println("==========================STORAGE===========================")
-	err = db.Walk(dbutils.CurrentStateBucket, []byte{}, 0, func(k []byte, v []byte) (b bool, e error) {
+	err = db.Walk(dbutils.CurrentStateBucketOld2, []byte{}, 0, func(k []byte, v []byte) (b bool, e error) {
 		stats.Storage += uint64(len(v))
 		return true, nil
 	})
@@ -1207,7 +1207,7 @@ func TestWrongIncarnation(t *testing.T) {
 
 	var startKey [common.HashLength + 8 + common.HashLength]byte
 	copy(startKey[:], addrHash)
-	err = db.Walk(dbutils.CurrentStateBucket, startKey[:], 8*common.HashLength, func(k, v []byte) (bool, error) {
+	err = db.Walk(dbutils.CurrentStateBucketOld2, startKey[:], 8*common.HashLength, func(k, v []byte) (bool, error) {
 		fmt.Printf("%x: %x\n", k, v)
 		return true, nil
 	})

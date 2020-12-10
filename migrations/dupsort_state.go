@@ -19,7 +19,7 @@ var dupSortHashState = Migration{
 			return OnLoadCommit(db, nil, true)
 		}
 
-		if err := db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.CurrentStateBucket); err != nil {
+		if err := db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.CurrentStateBucketOld2); err != nil {
 			return err
 		}
 		extractFunc := func(k []byte, v []byte, next etl.ExtractNextFunc) error {
@@ -30,7 +30,7 @@ var dupSortHashState = Migration{
 			"dupsort_hash_state",
 			db,
 			dbutils.CurrentStateBucketOld1,
-			dbutils.CurrentStateBucket,
+			dbutils.CurrentStateBucketOld2,
 			tmpdir,
 			extractFunc,
 			etl.IdentityLoadFunc,
@@ -85,11 +85,11 @@ var dupSortPlainState = Migration{
 var dupSortIH = Migration{
 	Name: "dupsort_intermediate_trie_hashes",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, OnLoadCommit etl.LoadCommitHandler) error {
-		if err := db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.IntermediateTrieHashBucket); err != nil {
+		if err := db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.IntermediateTrieHashBucketOld2); err != nil {
 			return err
 		}
 		buf := etl.NewSortableBuffer(etl.BufferOptimalSize)
-		comparator := db.(ethdb.HasTx).Tx().Comparator(dbutils.IntermediateTrieHashBucket)
+		comparator := db.(ethdb.HasTx).Tx().Comparator(dbutils.IntermediateTrieHashBucketOld2)
 		buf.SetComparator(comparator)
 		collector := etl.NewCollector(tmpdir, buf)
 		hashCollector := func(keyHex []byte, hash []byte) error {
@@ -101,14 +101,14 @@ var dupSortIH = Migration{
 			}
 			return collector.Collect(keyHex, hash)
 		}
-		loader := trie.NewFlatDBTrieLoader("dupsort_intermediate_trie_hashes", dbutils.CurrentStateBucket, dbutils.IntermediateTrieHashBucket)
+		loader := trie.NewFlatDBTrieLoader("dupsort_intermediate_trie_hashes", dbutils.CurrentStateBucketOld2, dbutils.IntermediateTrieHashBucketOld2)
 		if err := loader.Reset(trie.NewRetainList(0), hashCollector /* HashCollector */, false); err != nil {
 			return err
 		}
 		if _, err := loader.CalcTrieRoot(db, nil); err != nil {
 			return err
 		}
-		if err := collector.Load("dupsort_intermediate_trie_hashes", db, dbutils.IntermediateTrieHashBucket, etl.IdentityLoadFunc, etl.TransformArgs{
+		if err := collector.Load("dupsort_intermediate_trie_hashes", db, dbutils.IntermediateTrieHashBucketOld2, etl.IdentityLoadFunc, etl.TransformArgs{
 			Comparator: comparator,
 		}); err != nil {
 			return fmt.Errorf("gen ih stage: fail load data to bucket: %w", err)
@@ -144,7 +144,7 @@ var clearIndices = Migration{
 var resetIHBucketToRecoverDB = Migration{
 	Name: "reset_in_bucket_to_recover_db",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, OnLoadCommit etl.LoadCommitHandler) error {
-		if err := db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.IntermediateTrieHashBucket); err != nil {
+		if err := db.(ethdb.BucketsMigrator).ClearBuckets(dbutils.IntermediateTrieHashBucketOld2); err != nil {
 			return err
 		}
 		if err := stages.SaveStageProgress(db, stages.IntermediateHashes, 0, nil); err != nil {

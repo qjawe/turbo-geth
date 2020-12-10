@@ -502,6 +502,12 @@ func (tx *MdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 		}
 		dbi = dbutils.DBI(nativeDBI)
 	}
+	flags, err := tx.tx.Flags(mdbx.DBI(dbi))
+	if err != nil {
+		return err
+	}
+	fmt.Printf("%d, %s\n", flags, name)
+
 	logEvery := time.NewTicker(30 * time.Second)
 	defer logEvery.Stop()
 	for {
@@ -731,7 +737,11 @@ func (tx *MdbxTx) BucketStat(name string) (*mdbx.Stat, error) {
 	if name == "root" {
 		return tx.tx.StatDBI(mdbx.DBI(1))
 	}
-	return tx.tx.StatDBI(mdbx.DBI(tx.db.buckets[name].DBI))
+	st, err := tx.tx.StatDBI(mdbx.DBI(tx.db.buckets[name].DBI))
+	if err != nil {
+		return nil, fmt.Errorf("bucket: %s, %w", name, err)
+	}
+	return st, nil
 }
 
 func (tx *MdbxTx) Cursor(bucket string) Cursor {

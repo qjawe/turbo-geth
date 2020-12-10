@@ -600,7 +600,7 @@ func (fstl *FlatDbSubTrieLoader) LoadSubTries() (SubTries, error) {
 		defer fstl.tx.Rollback()
 	}
 	tx := fstl.tx
-	c := tx.Cursor(dbutils.CurrentStateBucket)
+	c := tx.Cursor(dbutils.CurrentStateBucketOld2)
 	var filter = func(k []byte) (bool, error) {
 
 		if fstl.rl.Retain(k) {
@@ -618,7 +618,7 @@ func (fstl *FlatDbSubTrieLoader) LoadSubTries() (SubTries, error) {
 
 		return true, nil
 	}
-	ih := NewIHCursor2(NewFilterCursor2(filter, tx.CursorDupSort(dbutils.IntermediateTrieHashBucket)))
+	ih := NewIHCursor2(NewFilterCursor2(filter, tx.CursorDupSort(dbutils.IntermediateTrieHashBucketOld2)))
 	if err := fstl.iteration(c, ih, true /* first */); err != nil {
 		return SubTries{}, err
 	}

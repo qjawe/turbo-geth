@@ -14,13 +14,12 @@ import (
 	"github.com/ledgerwatch/turbo-geth/cmd/utils"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
-	"github.com/ledgerwatch/turbo-geth/ethdb/mdbx"
 	"github.com/ledgerwatch/turbo-geth/log"
 	"github.com/spf13/cobra"
 )
 
 var stateBuckets = []string{
-	dbutils.CurrentStateBucket,
+	dbutils.CurrentStateBucketOld2,
 	dbutils.AccountChangeSetBucket,
 	dbutils.StorageChangeSetBucket,
 	dbutils.ContractCodeBucket,
@@ -30,7 +29,7 @@ var stateBuckets = []string{
 	dbutils.PlainContractCodeBucket,
 	dbutils.IncarnationMapBucket,
 	dbutils.CodeBucket,
-	dbutils.IntermediateTrieHashBucket,
+	dbutils.IntermediateTrieHashBucketOld2,
 	dbutils.AccountsHistoryBucket,
 	dbutils.StorageHistoryBucket,
 	dbutils.TxLookupPrefix,
@@ -260,10 +259,10 @@ func fToMdbx(ctx context.Context, to string) error {
 
 	//r := csv.NewReader(bufio.NewReaderSize(file, 1024*1024))
 	//r.Read()
-	//_ = dstTx.(ethdb.BucketMigrator).ClearBucket(dbutils.CurrentStateBucket)
+	//_ = dstTx.(ethdb.BucketMigrator).ClearBucket(dbutils.CurrentStateBucketOld2)
 
 	fileScanner := bufio.NewScanner(file)
-	c := dstTx.CursorDupSort(dbutils.CurrentStateBucket)
+	c := dstTx.CursorDupSort(dbutils.CurrentStateBucketOld2)
 	for fileScanner.Scan() {
 		kv := strings.Split(fileScanner.Text(), ",")
 		k, _ := hex.DecodeString(kv[0])
@@ -297,16 +296,14 @@ func toMdbx(ctx context.Context, from, to string) error {
 	src := ethdb.NewLMDB().Path(from).Flags(func(flags uint) uint {
 		return (flags | lmdb.Readonly) ^ lmdb.NoReadahead
 	}).MustOpen()
-	dst := ethdb.NewMDBX().Path(to).Flags(func(flags uint) uint {
-		return flags | mdbx.WriteMap | mdbx.NoMemInit
-	}).MustOpen()
+	dst := ethdb.NewMDBX().Path(to).MustOpen()
 
 	srcTx, err1 := src.Begin(ctx, nil, ethdb.RO)
 	if err1 != nil {
 		return err1
 	}
 	defer srcTx.Rollback()
-	dstTx, err1 := dst.Begin(ctx, nil, ethdb.RW|ethdb.NoSync)
+	dstTx, err1 := dst.Begin(ctx, nil, ethdb.RW)
 	if err1 != nil {
 		return err1
 	}
@@ -356,7 +353,7 @@ func toMdbx(ctx context.Context, from, to string) error {
 				if err2 := dstTx.Commit(ctx); err2 != nil {
 					return err2
 				}
-				dstTx, err = dst.Begin(ctx, nil, ethdb.RW|ethdb.NoSync)
+				dstTx, err = dst.Begin(ctx, nil, ethdb.RW)
 				if err != nil {
 					return err
 				}
