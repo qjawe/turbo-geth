@@ -421,7 +421,7 @@ func (p *Promoter) Unwind(logPrefix string, s *StageState, u *UnwindState, stora
 		l.innerLoadFunc = etl.IdentityLoadFunc
 	} else {
 		l.innerLoadFunc = etl.IdentityLoadFunc
-		loadBucket = dbutils.CurrentStateBucket
+		loadBucket = dbutils.CurrentStateBucketOld2
 		if storage {
 			loadBucket = dbutils.HashedStorageBucket
 			extractFunc = getUnwindExtractStorage(changeSetBucket)

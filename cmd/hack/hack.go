@@ -316,7 +316,7 @@ func accountSavings(db ethdb.KV) (int, int) {
 	emptyRoots := 0
 	emptyCodes := 0
 	check(db.View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.CurrentStateBucket)
+		c := tx.Cursor(dbutils.CurrentStateBucketOld2)
 		for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 			if err != nil {
 				return err
@@ -1015,7 +1015,7 @@ func nextIncarnation(chaindata string, addrHash common.Hash) {
 	startkey := make([]byte, common.HashLength+common.IncarnationLength+common.HashLength)
 	var fixedbits = 8 * common.HashLength
 	copy(startkey, addrHash[:])
-	if err := ethDb.Walk(dbutils.CurrentStateBucket, startkey, fixedbits, func(k, v []byte) (bool, error) {
+	if err := ethDb.Walk(dbutils.CurrentStateBucketOld2, startkey, fixedbits, func(k, v []byte) (bool, error) {
 		copy(incarnationBytes[:], k[common.HashLength:])
 		found = true
 		return false, nil
@@ -1035,12 +1035,12 @@ func repairCurrent() {
 	defer historyDb.Close()
 	currentDb := ethdb.MustOpen("statedb")
 	defer currentDb.Close()
-	check(historyDb.ClearBuckets(dbutils.CurrentStateBucket))
+	check(historyDb.ClearBuckets(dbutils.CurrentStateBucketOld2))
 	check(historyDb.KV().Update(context.Background(), func(tx ethdb.Tx) error {
-		newB := tx.Cursor(dbutils.CurrentStateBucket)
+		newB := tx.Cursor(dbutils.CurrentStateBucketOld2)
 		count := 0
 		if err := currentDb.KV().View(context.Background(), func(ctx ethdb.Tx) error {
-			c := ctx.Cursor(dbutils.CurrentStateBucket)
+			c := ctx.Cursor(dbutils.CurrentStateBucketOld2)
 			for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 				if err != nil {
 					return err
@@ -1230,7 +1230,7 @@ func regenerate(chaindata string) error {
 	db := ethdb.MustOpen(chaindata)
 	defer db.Close()
 	check(db.ClearBuckets(
-		dbutils.IntermediateTrieHashBucket,
+		dbutils.IntermediateTrieHashBucketOld2,
 	))
 	headHash := rawdb.ReadHeadBlockHash(db)
 	headNumber := rawdb.ReadHeaderNumber(db, headHash)
@@ -1262,7 +1262,7 @@ func regenerate(chaindata string) error {
 	}
 	/*
 		quitCh := make(chan struct{})
-		if err := collector.Load(db, dbutils.IntermediateTrieHashBucket, etl.IdentityLoadFunc, etl.TransformArgs{Quit: quitCh}); err != nil {
+		if err := collector.Load(db, dbutils.IntermediateTrieHashBucketOld2, etl.IdentityLoadFunc, etl.TransformArgs{Quit: quitCh}); err != nil {
 			return err
 		}
 	*/

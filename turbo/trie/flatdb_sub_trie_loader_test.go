@@ -22,7 +22,7 @@ func TestResolve1(t *testing.T) {
 
 	require, assert, db := require.New(t), assert.New(t), ethdb.NewMemDatabase()
 	putStorage := func(k string, v string) {
-		err := db.Put(dbutils.CurrentStateBucket, common.Hex2Bytes(k), common.Hex2Bytes(v))
+		err := db.Put(dbutils.CurrentStateBucketOld2, common.Hex2Bytes(k), common.Hex2Bytes(v))
 		require.NoError(err)
 	}
 	putStorage("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "")
@@ -43,7 +43,7 @@ func TestResolve2(t *testing.T) {
 
 	require, assert, db := require.New(t), assert.New(t), ethdb.NewMemDatabase()
 	putStorage := func(k string, v string) {
-		err := db.Put(dbutils.CurrentStateBucket, common.Hex2Bytes(k), common.Hex2Bytes(v))
+		err := db.Put(dbutils.CurrentStateBucketOld2, common.Hex2Bytes(k), common.Hex2Bytes(v))
 		require.NoError(err)
 	}
 	putStorage("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "")
@@ -67,7 +67,7 @@ func TestResolve2Keep(t *testing.T) {
 
 	require, assert, db := require.New(t), assert.New(t), ethdb.NewMemDatabase()
 	putStorage := func(k string, v string) {
-		err := db.Put(dbutils.CurrentStateBucket, common.Hex2Bytes(k), common.Hex2Bytes(v))
+		err := db.Put(dbutils.CurrentStateBucketOld2, common.Hex2Bytes(k), common.Hex2Bytes(v))
 		require.NoError(err)
 	}
 	putStorage("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "")
@@ -91,7 +91,7 @@ func TestResolve3Keep(t *testing.T) {
 
 	require, assert, db := require.New(t), assert.New(t), ethdb.NewMemDatabase()
 	putStorage := func(k string, v string) {
-		err := db.Put(dbutils.CurrentStateBucket, common.Hex2Bytes(k), common.Hex2Bytes(v))
+		err := db.Put(dbutils.CurrentStateBucketOld2, common.Hex2Bytes(k), common.Hex2Bytes(v))
 		require.NoError(err)
 	}
 	putStorage("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "")
@@ -116,7 +116,7 @@ func TestTrieSubTrieLoader(t *testing.T) {
 
 	require, _, db := require.New(t), assert.New(t), ethdb.NewMemDatabase()
 	putStorage := func(k string, v string) {
-		err := db.Put(dbutils.CurrentStateBucket, common.Hex2Bytes(k), common.Hex2Bytes(v))
+		err := db.Put(dbutils.CurrentStateBucketOld2, common.Hex2Bytes(k), common.Hex2Bytes(v))
 		require.NoError(err)
 	}
 	putStorage("aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa", "")
@@ -147,8 +147,8 @@ func TestTwoStorageItems(t *testing.T) {
 	val1 := common.Hex2Bytes("02")
 	val2 := common.Hex2Bytes("03")
 
-	require.NoError(db.Put(dbutils.CurrentStateBucket, key1, val1))
-	require.NoError(db.Put(dbutils.CurrentStateBucket, key2, val2))
+	require.NoError(db.Put(dbutils.CurrentStateBucketOld2, key1, val1))
+	require.NoError(db.Put(dbutils.CurrentStateBucketOld2, key2, val2))
 	var branch fullNode
 	branch.Children[0x7] = NewShortNode(keybytesToHex(key1[1:]), valueNode(val1))
 	branch.Children[0xf] = NewShortNode(keybytesToHex(key2[1:]), valueNode(val2))
@@ -254,7 +254,7 @@ func TestApiDetails(t *testing.T) {
 		return dbutils.GenerateCompositeStorageKey(common.HexToHash(k), incarnation, common.HexToHash("0000000000000000000000000000000000000000000000000000000000000000"))
 	}
 	putIH := func(k string, v string) {
-		require.NoError(db.Put(dbutils.IntermediateTrieHashBucket, common.Hex2Bytes(k), common.Hex2Bytes(v)))
+		require.NoError(db.Put(dbutils.IntermediateTrieHashBucketOld2, common.Hex2Bytes(k), common.Hex2Bytes(v)))
 	}
 
 	// Test attempt handle cases when: Trie root hash is same for Cached and non-Cached SubTrieLoaders
@@ -286,7 +286,7 @@ func TestApiDetails(t *testing.T) {
 					Incarnation: 2, // all acc have 2nd inc, but some storage are on 1st inc
 				}
 				require.NoError(writeAccount(db, common.BytesToHash(common.Hex2Bytes(k)), a))
-				require.NoError(db.Put(dbutils.CurrentStateBucket, storageKey(incarnation, k), storageV))
+				require.NoError(db.Put(dbutils.CurrentStateBucketOld2, storageKey(incarnation, k), storageV))
 			}
 		}
 	}
@@ -428,7 +428,7 @@ func TestStorageSubTrieLoader2(t *testing.T) {
 	kAcc2 := common.FromHex("0001cf1ce0664746d39af9f6db99dc3370282f1d9d48df7f804b7e6499558c83")
 	k2 := "290decd9548b62a8d60345a988386fc84ba6bc95484008f6362f93160ef3e563"
 	ks2 := dbutils.GenerateCompositeStorageKey(common.BytesToHash(kAcc2), 1, common.HexToHash(k2))
-	require.NoError(db.Put(dbutils.CurrentStateBucket, ks2, common.FromHex("7a381122bada791a7ab1f6037dac80432753baad")))
+	require.NoError(db.Put(dbutils.CurrentStateBucketOld2, ks2, common.FromHex("7a381122bada791a7ab1f6037dac80432753baad")))
 
 	expectedAccStorageRoot := "28d28aa6f1d0179248560a25a1a4ad69be1cdeab9e2b24bc9f9c70608e3a7ec0"
 	expectedAccRoot2 := expectedAccStorageRoot
@@ -449,8 +449,8 @@ func TestStorageSubTrieLoader2(t *testing.T) {
 	k3 := k2
 	ks3 := dbutils.GenerateCompositeStorageKey(common.BytesToHash(kAcc3), 2, common.HexToHash(k3))
 	ks3OldIncarnation := dbutils.GenerateCompositeStorageKey(common.BytesToHash(kAcc3), 1, common.HexToHash(k3))
-	require.NoError(db.Put(dbutils.CurrentStateBucket, ks3, common.FromHex("7a381122bada791a7ab1f6037dac80432753baad")))
-	require.NoError(db.Put(dbutils.CurrentStateBucket, ks3OldIncarnation, common.FromHex("9999999999999999")))
+	require.NoError(db.Put(dbutils.CurrentStateBucketOld2, ks3, common.FromHex("7a381122bada791a7ab1f6037dac80432753baad")))
+	require.NoError(db.Put(dbutils.CurrentStateBucketOld2, ks3OldIncarnation, common.FromHex("9999999999999999")))
 
 	expectedAccRoot3 := expectedAccStorageRoot
 	a3 := accounts.Account{
@@ -471,7 +471,7 @@ func TestStorageSubTrieLoader2(t *testing.T) {
 	// abandoned storage - account was deleted, but storage still exists
 	kAcc4 := common.FromHex("0004cf1ce0664746d39af9f6db99dc3370282f1d9d48df7f804b7e6499558c83") // don't write it to db
 	ks4 := dbutils.GenerateCompositeStorageKey(common.BytesToHash(kAcc4), 1, common.HexToHash(k2))
-	require.NoError(db.Put(dbutils.CurrentStateBucket, ks4, common.FromHex("7a381122bada791a7ab1f6037dac80432753baad")))
+	require.NoError(db.Put(dbutils.CurrentStateBucketOld2, ks4, common.FromHex("7a381122bada791a7ab1f6037dac80432753baad")))
 
 	{
 		resolver := NewSubTrieLoader(0)
@@ -595,7 +595,7 @@ func TestIsSequence(t *testing.T) {
 func writeAccount(db ethdb.Putter, addrHash common.Hash, acc accounts.Account) error {
 	value := make([]byte, acc.EncodingLengthForStorage())
 	acc.EncodeForStorage(value)
-	if err := db.Put(dbutils.CurrentStateBucket, addrHash[:], value); err != nil {
+	if err := db.Put(dbutils.CurrentStateBucketOld2, addrHash[:], value); err != nil {
 		return err
 	}
 	return nil

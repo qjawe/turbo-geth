@@ -34,7 +34,7 @@ func findIntermediateHashByPrefix(prefixS string, remoteDB ethdb.KV) ([]*Interme
 	var results []*IntermediateHashResponse
 	prefix := common.FromHex(prefixS)
 	if err := remoteDB.View(context.TODO(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.IntermediateTrieHashBucket).Prefix(prefix)
+		c := tx.Cursor(dbutils.IntermediateTrieHashBucketOld2).Prefix(prefix)
 
 		for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 			if err != nil {

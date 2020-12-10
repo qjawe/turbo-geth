@@ -285,14 +285,14 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 					//nolint:errcheck
 					h.Sha.Read(newK[common.HashLength+common.IncarnationLength:])
 				}
-				if err = tx.Put(dbutils.CurrentStateBucket, newK, common.CopyBytes(v)); err != nil {
+				if err = tx.Put(dbutils.CurrentStateBucketOld2, newK, common.CopyBytes(v)); err != nil {
 					return nil, nil, fmt.Errorf("insert hashed key: %w", err)
 				}
 			}
 			c.Close()
 			if GenerateTrace {
 				fmt.Printf("State after %d================\n", i)
-				if err := tx.Walk(dbutils.CurrentStateBucket, nil, 0, func(k, v []byte) (bool, error) {
+				if err := tx.Walk(dbutils.CurrentStateBucketOld2, nil, 0, func(k, v []byte) (bool, error) {
 					fmt.Printf("%x: %x\n", k, v)
 					return true, nil
 				}); err != nil {
@@ -302,7 +302,7 @@ func GenerateChain(config *params.ChainConfig, parent *types.Block, engine conse
 			}
 			var hashCollector func(keyHex []byte, hash []byte) error
 			unfurl := trie.NewRetainList(0)
-			loader := trie.NewFlatDBTrieLoader("GenerateChain", dbutils.CurrentStateBucket, dbutils.IntermediateTrieHashBucket)
+			loader := trie.NewFlatDBTrieLoader("GenerateChain", dbutils.CurrentStateBucketOld2, dbutils.IntermediateTrieHashBucketOld2)
 			if err := loader.Reset(unfurl, hashCollector, false); err != nil {
 				return nil, nil, fmt.Errorf("call to FlatDbSubTrieLoader.Reset: %w", err)
 			}
