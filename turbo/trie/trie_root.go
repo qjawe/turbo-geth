@@ -204,8 +204,8 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 	var filter = func(k []byte) bool {
 		return !l.rd.Retain(k)
 	}
-	ih := IH(filter, cursors)
-	ihStorage := IHStorage(filter, cursors)
+	ih := IH(filter, cursors, l.hc)
+	ihStorage := IHStorage(filter, cursors, l.hc)
 
 	logEvery := time.NewTicker(30 * time.Second)
 	defer logEvery.Stop()
@@ -649,6 +649,7 @@ const IHDupKeyLen = 2 * (common.HashLength + common.IncarnationLength)
 // IHCursor - holds logic related to iteration over IH bucket
 type IHCursor struct {
 	c          [161]ethdb.Cursor
+	hc         HashCollector
 	filter     Filter
 	i          int
 	prev       []byte
@@ -658,8 +659,8 @@ type IHCursor struct {
 	accWithInc []byte
 }
 
-func IH(f Filter, c [161]ethdb.Cursor) *IHCursor {
-	ih := &IHCursor{c: c, filter: f, i: 1}
+func IH(f Filter, c [161]ethdb.Cursor, hc HashCollector) *IHCursor {
+	ih := &IHCursor{c: c, filter: f, i: 1, hc: hc}
 	ih.parents[1] = []byte{}
 	return ih
 }
@@ -723,8 +724,7 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 			return k, v, nil
 		}
 
-		k = common.CopyBytes(k)
-		err = cursor.DeleteCurrent()
+		err = c.hc(k, nil)
 		if err != nil {
 			return []byte{}, nil, err
 		}
@@ -780,9 +780,11 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 
 // IHStorageCursor - holds logic related to iteration over IH bucket
 type IHStorageCursor struct {
-	c          [161]ethdb.Cursor
-	filter     Filter
-	i          int
+	c      [161]ethdb.Cursor
+	filter Filter
+	i      int
+	hc     HashCollector
+
 	prev       []byte
 	cur        []byte
 	buf        []byte
@@ -790,8 +792,8 @@ type IHStorageCursor struct {
 	accWithInc []byte
 }
 
-func IHStorage(f Filter, c [161]ethdb.Cursor) *IHStorageCursor {
-	ih := &IHStorageCursor{c: c, filter: f, i: 1}
+func IHStorage(f Filter, c [161]ethdb.Cursor, hc HashCollector) *IHStorageCursor {
+	ih := &IHStorageCursor{c: c, filter: f, i: 1, hc: hc}
 	ih.parents[1] = []byte{}
 	return ih
 }
@@ -844,12 +846,10 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 			return k, v, nil
 		}
 
-		k = common.CopyBytes(k)
-		err = cursor.DeleteCurrent()
+		err = c.hc(k, nil)
 		if err != nil {
 			return []byte{}, nil, err
 		}
-
 		c.i++
 		c.parents[c.i] = k[1:]
 		cursor = c.c[c.i]
