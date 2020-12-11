@@ -487,7 +487,7 @@ func (tx *lmdbTx) CreateBucket(name string) error {
 	}
 	dbi, err := tx.tx.OpenDBI(name, nativeFlags)
 	if err != nil {
-		return err
+		return fmt.Errorf("bucket: %s, %w", name, err)
 	}
 	cnfCopy := tx.db.buckets[name]
 	cnfCopy.DBI = dbutils.DBI(dbi)
@@ -548,6 +548,7 @@ func (tx *lmdbTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 		dbi = dbutils.DBI(nativeDBI)
 	}
 	if err := tx.tx.Drop(lmdb.DBI(dbi), true); err != nil {
+		panic(1)
 		return err
 	}
 	cnfCopy := tx.db.buckets[name]
@@ -844,7 +845,7 @@ func (c *LmdbCursor) initCursor() error {
 	var err error
 	c.c, err = tx.tx.OpenCursor(c.dbi)
 	if err != nil {
-		return err
+		return fmt.Errorf("bucket: %s, %w\n", c.bucketName, err)
 	}
 
 	// add to auto-cleanup on end of transactions

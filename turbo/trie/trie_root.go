@@ -199,7 +199,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 	accs, storages := NewStateCursor(tx.Cursor(dbutils.HashedAccountsBucket)), NewStateCursor(tx.Cursor(dbutils.HashedStorageBucket))
 	cursors := [161]ethdb.Cursor{}
 	for i := 0; i < 161; i++ {
-		cursors[i] = tx.Cursor(dbutils.IntermediateTrieHashBucket3)
+		cursors[i] = tx.Cursor(dbutils.IntermediateHashOfAccountBucket)
 	}
 	var filter = func(k []byte) bool {
 		return !l.rd.Retain(k)
