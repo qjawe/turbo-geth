@@ -951,8 +951,12 @@ func TestIHCursor(t *testing.T) {
 		}
 		return true
 	}
-	ih := IH(filter, cursors)
-	ihStorage := IHStorage(filter, cursors)
+	ih := IH(filter, cursors, func(keyHex []byte, hash []byte) error {
+		return nil
+	})
+	ihStorage := IHStorage(filter, cursors, func(keyHex []byte, hash []byte) error {
+		return nil
+	})
 	k, _, isSeq, _ := ih.First()
 	fmt.Printf("1: %x, %t\n", k, isSeq)
 	k, _, isSeq, _ = ih.Next()

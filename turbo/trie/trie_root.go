@@ -681,6 +681,7 @@ func (c *IHCursor) First() (k, v []byte, isSeq bool, err error) {
 		return nil, nil, false, nil
 	}
 	c.cur = common.CopyBytes(k[1:])
+
 	return c.cur, common.CopyBytes(v), isSequence([]byte{0}, c.cur), nil
 }
 
