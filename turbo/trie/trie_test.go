@@ -923,7 +923,7 @@ func TestIHCursor(t *testing.T) {
 	for _, k := range []string{"00", "0001", "01", "0100", "0101", "0102", "02", acc, acc + "00", acc + "01", acc + "02"} {
 		kk := common.FromHex(k)
 		kk = append(append([]byte{}, uint8(len(kk))), kk...)
-		db.Put(dbutils.IntermediateTrieHashBucket3, kk, kk)
+		_ = db.Put(dbutils.IntermediateTrieHashBucket3, kk, kk)
 	}
 
 	tx, err := db.KV().Begin(context.Background(), nil, ethdb.RW)
