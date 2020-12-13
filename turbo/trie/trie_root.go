@@ -214,10 +214,12 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 	logEvery := time.NewTicker(30 * time.Second)
 	defer logEvery.Stop()
 
+	i1, i2, i3, i4 := 0, 0, 0, 0
 	for ihK, ihV, isIHSequence, err := ih.First(); ; ihK, ihV, isIHSequence, err = ih.Next() { // no loop termination is at he end of loop
 		if err != nil {
 			return EmptyRoot, err
 		}
+		i1++
 		if isIHSequence {
 			if ihK == nil {
 				break
@@ -241,6 +243,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 			if err1 != nil {
 				return EmptyRoot, err1
 			}
+			i2++
 
 			if err = common.Stopped(quit); err != nil {
 				return EmptyRoot, err
@@ -267,6 +270,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 				if err2 != nil {
 					return EmptyRoot, err2
 				}
+				i3++
 
 				if isSeqS {
 					if ihKS == nil {
@@ -295,7 +299,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 					if err3 != nil {
 						return EmptyRoot, err3
 					}
-
+					i4++
 					if !bytes.HasPrefix(kS, l.accAddrHashWithInc[:]) || keyIsBefore(ihKS, kHexS) { // read all accounts until next IH
 						break
 					}
@@ -340,6 +344,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 		}
 	}
 
+	fmt.Printf("a: %d, %d, %d, %d\n", i1, i2, i3, i4)
 	return l.receiver.Root(), nil
 }
 
