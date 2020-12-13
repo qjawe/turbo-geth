@@ -333,7 +333,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 	if err := l.receiver.Receive(CutoffStreamItem, nil, nil, nil, nil, nil, 0); err != nil {
 		return EmptyRoot, err
 	}
-
+	panic(1)
 	if !useExternalTx {
 		_, err := txDB.Commit()
 		if err != nil {
@@ -384,7 +384,7 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 	hash []byte,
 	cutoff int,
 ) error {
-	fmt.Printf("1: %d, %x, %x, %x, %x\n", itemType, accountKey, storageKey, hash, storageValue)
+	//fmt.Printf("1: %d, %x, %x, %x, %x\n", itemType, accountKey, storageKey, hash, storageValue)
 	switch itemType {
 	case StorageStreamItem:
 		r.advanceKeysStorage(storageKey, true /* terminator */)
@@ -711,14 +711,12 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 		return []byte{}, nil, err
 	}
 	for {
-		fmt.Printf("loop: %x,%x\n", k, v)
 		if len(v) > 0 {
 			k = v[:len(v)-32]
 			v = v[len(v)-32:]
 		} else {
 			k, v = nil, nil
 		}
-		fmt.Printf("loop: %x,%x\n", k, v)
 
 		if k == nil || len(k) > c.i || !bytes.HasPrefix(k, c.parents[c.i]) {
 			if c.i == 1 {
@@ -862,6 +860,9 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 		} else {
 			k, v = nil, nil
 		}
+		//if bytes.HasPrefix(c.parents[c.i], common.FromHex("030f0404050b01030c0d0a0b020a0f000e000b0100010e010d070304040d03020b0f0d0402030603090b000708010f080f0d0f0d01080c0d0d070f0d05050b0000000000000000000000000000000001")) {
+		//	fmt.Printf("3: %x ->%x,%x\n", c.buf, k, v)
+		//}
 
 		if k == nil || len(k) > c.i || !bytes.HasPrefix(k, c.parents[c.i]) {
 			if c.i == 80 {
@@ -869,7 +870,11 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 			}
 			c.i--
 			cursor = c.c[c.i]
-			k, v, err = cursor.NextNoDup()
+			k, v, err = cursor.NextDup()
+
+			//if bytes.HasPrefix(c.parents[c.i], common.FromHex("030f0404050b01030c0d0a0b020a0f000e000b0100010e010d070304040d03020b0f0d0402030603090b000708010f080f0d0f0d01080c0d0d070f0d05050b0000000000000000000000000000000001")) {
+			//	fmt.Printf("4: %x,%x, %d, %x\n", k, v, c.i, c.parents[c.i])
+			//}
 			if err != nil {
 				return []byte{}, nil, err
 			}
@@ -880,6 +885,10 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 		if c.filter(k) {
 			return k, v, nil
 		}
+
+		//if bytes.HasPrefix(c.parents[c.i], common.FromHex("030f0404050b01030c0d0a0b020a0f000e000b0100010e010d070304040d03020b0f0d0402030603090b000708010f080f0d0f0d01080c0d0d070f0d05050b0000000000000000000000000000000001")) {
+		//	fmt.Printf("5: %x,%x\n", k, v)
+		//}
 		k, v = common.CopyBytes(k), common.CopyBytes(v)
 		err = cursor.DeleteCurrent()
 		//	err = c.hc(k, nil)
@@ -892,7 +901,7 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 		c.buf[0] = uint8(c.i)
 		to := c.parents[c.i][IHDupKeyLen:]
 		if len(to) == 0 {
-			to = []byte{0}
+			to = common.FromHex(fmt.Sprintf("%064x", 0))
 		}
 		k, v, err = cursor.SeekBothRange(c.buf, to)
 		if err != nil {
@@ -917,7 +926,7 @@ func (c *IHStorageCursor) Next() (k, v []byte, isSeq bool, err error) {
 
 func (c *IHStorageCursor) _next() (k, v []byte, err error) {
 	cursor := c.c[c.i]
-	k, v, err = cursor.Next()
+	k, v, err = cursor.NextDup()
 	if err != nil {
 		return []byte{}, nil, err
 	}
@@ -930,7 +939,7 @@ func (c *IHStorageCursor) _next() (k, v []byte, err error) {
 			k, v = nil, nil
 		}
 
-		if k == nil || len(k)-1 > c.i || !bytes.HasPrefix(k[1:], c.parents[c.i]) {
+		if k == nil || len(k)-1 > c.i || !bytes.HasPrefix(k, c.parents[c.i]) {
 			if c.i == 80 {
 				return nil, nil, nil
 			}
@@ -959,9 +968,10 @@ func (c *IHStorageCursor) _next() (k, v []byte, err error) {
 		c.buf[0] = uint8(c.i)
 		to := c.parents[c.i][IHDupKeyLen:]
 		if len(to) == 0 {
-			to = []byte{0}
+			to = common.FromHex(fmt.Sprintf("%064x", 0))
 		}
 		k, v, err = cursor.SeekBothRange(c.buf, to)
+
 		if err != nil {
 			return []byte{}, nil, err
 		}
