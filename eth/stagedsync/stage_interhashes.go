@@ -267,10 +267,8 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 	p := NewHashPromoter(db, quit)
 	p.TempDir = tmpdir
 	var exclude [][]byte
-	//ihFilter := trie.NewPrefixFilter()
 	collect := func(k []byte, _ []byte, _ etl.CurrentTableReader, _ etl.LoadNextFunc) error {
 		exclude = append(exclude, k)
-		//ihFilter.Add(k)
 		return nil
 	}
 

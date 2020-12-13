@@ -732,7 +732,7 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 		if c.filter(k) {
 			return k, v, nil
 		}
-		k, v = common.CopyBytes(k), common.CopyBytes(v)
+		k = common.CopyBytes(k)
 		err = cursor.DeleteCurrent()
 		//	err = c.hc(k, nil)
 		if err != nil {
@@ -831,13 +831,13 @@ func (c *IHStorageCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, e
 		return []byte{}, nil, false, err
 	}
 	// important trick! reduce incarnation of .prev - then nextSubTree will work well
-	c.prev = common.CopyBytes(seek)
+	c.prev = append(c.prev[:0], seek...)
 	c.prev[len(c.prev)-1]--
 
 	if k == nil {
 		return nil, nil, false, nil
 	}
-	c.cur = common.CopyBytes(k)
+	c.cur = k
 	return c.cur, v, isSequence(c.prev, c.cur), nil
 }
 
@@ -918,7 +918,7 @@ func (c *IHStorageCursor) Next() (k, v []byte, isSeq bool, err error) {
 		return nil, nil, false, nil
 	}
 
-	c.cur = common.CopyBytes(k)
+	c.cur = k
 	return c.cur, v, isSequence(c.prev, c.cur), nil
 }
 
