@@ -318,8 +318,8 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 	if checkRoot && hash != expectedRootHash {
 		return fmt.Errorf("%s: wrong trie root: %x, expected (from header): %x", logPrefix, hash, expectedRootHash)
 	}
-	log.Info(fmt.Sprintf("[%s] Collection finished", logPrefix),
-		"root hash", hash.Hex(),
+	log.Warn(fmt.Sprintf("[%s] Collection finished", logPrefix),
+		//"root hash", hash.Hex(),
 		"gen IH", generationIHTook,
 	)
 	if err := accountIHCollector.Load(logPrefix, db,
