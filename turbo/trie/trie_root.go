@@ -195,17 +195,21 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 		defer txDB.Rollback()
 		tx = txDB.(ethdb.HasTx).Tx()
 	}
+	var filter = func(k []byte) bool {
+		return !l.rd.Retain(k)
+	}
 
 	accs, storages := NewStateCursor(tx.Cursor(dbutils.HashedAccountsBucket)), NewStateCursor(tx.Cursor(dbutils.HashedStorageBucket))
 	cursors := [161]ethdb.Cursor{}
 	for i := 0; i < 161; i++ {
 		cursors[i] = tx.Cursor(dbutils.IntermediateHashOfAccountBucket)
 	}
-	var filter = func(k []byte) bool {
-		return !l.rd.Retain(k)
-	}
 	ih := IH(filter, cursors, l.hc)
-	ihStorage := IHStorage(filter, cursors, l.hc)
+	cursorsS := [161]ethdb.Cursor{}
+	for i := 0; i < 161; i++ {
+		cursorsS[i] = tx.Cursor(dbutils.IntermediateHashOfStorageBucket)
+	}
+	ihStorage := IHStorage(filter, cursorsS, l.hc)
 
 	logEvery := time.NewTicker(30 * time.Second)
 	defer logEvery.Stop()
@@ -827,7 +831,11 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 	if err != nil {
 		return []byte{}, nil, err
 	}
-
+	ethdb.Walk(cursor, nil, 0, func(k, v []byte) (bool, error) {
+		fmt.Printf("%x\n", k)
+		return true, nil
+	})
+	fmt.Printf("seek: %x, %x\n", append([]byte{uint8(c.i)}, seek...), k)
 	for {
 		if k == nil || len(k)-1 > c.i || !bytes.HasPrefix(k[1:], c.parents[c.i]) {
 			if c.i == 80 {
