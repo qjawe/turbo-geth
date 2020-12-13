@@ -732,14 +732,13 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 		if c.filter(k) {
 			return k, v, nil
 		}
-		k = common.CopyBytes(k)
+		c.i++
+		c.parents[c.i] = append(c.parents[c.i][:0], k...)
 		err = cursor.DeleteCurrent()
 		//	err = c.hc(k, nil)
 		if err != nil {
 			return []byte{}, nil, err
 		}
-		c.i++
-		c.parents[c.i] = k
 		cursor = c.c[c.i]
 		c.buf[0] = uint8(c.i)
 		k, v, err = cursor.SeekBothRange(c.buf, c.parents[c.i])
@@ -781,14 +780,13 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 		if c.filter(k) {
 			return k, v, nil
 		}
-		k = common.CopyBytes(k)
+		c.i++
+		c.parents[c.i] = append(c.parents[c.i][:0], k...)
 		err = cursor.DeleteCurrent()
 		//	err = c.hc(k, nil)
 		if err != nil {
 			return []byte{}, nil, err
 		}
-		c.i++
-		c.parents[c.i] = k
 		cursor = c.c[c.i]
 		c.buf[0] = uint8(c.i)
 		k, v, err = cursor.SeekBothRange(c.buf, c.parents[c.i])
@@ -887,14 +885,13 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 		//if bytes.HasPrefix(c.parents[c.i], common.FromHex("030f0404050b01030c0d0a0b020a0f000e000b0100010e010d070304040d03020b0f0d0402030603090b000708010f080f0d0f0d01080c0d0d070f0d05050b0000000000000000000000000000000001")) {
 		//	fmt.Printf("5: %x,%x\n", k, v)
 		//}
-		k = common.CopyBytes(k)
+		c.i++
+		c.parents[c.i] = append(c.parents[c.i][:0], k...)
 		err = cursor.DeleteCurrent()
 		//	err = c.hc(k, nil)
 		if err != nil {
 			return []byte{}, nil, err
 		}
-		c.i++
-		c.parents[c.i] = k
 		cursor = c.c[c.i]
 		c.buf[0] = uint8(c.i)
 		to := c.parents[c.i][IHDupKeyLen:]
@@ -955,13 +952,12 @@ func (c *IHStorageCursor) _next() (k, v []byte, err error) {
 			return k, v, nil
 		}
 
-		k = common.CopyBytes(k)
+		c.i++
+		c.parents[c.i] = append(c.parents[c.i][:0], k...)
 		err = cursor.DeleteCurrent()
 		if err != nil {
 			return []byte{}, nil, err
 		}
-		c.i++
-		c.parents[c.i] = k
 		cursor = c.c[c.i]
 		c.buf[0] = uint8(c.i)
 		to := c.parents[c.i][IHDupKeyLen:]
