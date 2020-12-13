@@ -384,7 +384,7 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 	hash []byte,
 	cutoff int,
 ) error {
-	//fmt.Printf("1: %d, %x, %x, %x, %x\n", itemType, accountKey, storageKey, hash, storageValue)
+	fmt.Printf("1: %d, %x, %x, %x, %x\n", itemType, accountKey, storageKey, hash, storageValue)
 	switch itemType {
 	case StorageStreamItem:
 		r.advanceKeysStorage(storageKey, true /* terminator */)
@@ -699,7 +699,7 @@ func (c *IHCursor) Next() (k, v []byte, isSeq bool, err error) {
 	if k == nil {
 		return nil, nil, false, nil
 	}
-	c.cur = common.CopyBytes(k[1:])
+	c.cur = common.CopyBytes(k)
 	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
 }
 
@@ -710,12 +710,14 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 		return []byte{}, nil, err
 	}
 	for {
+		fmt.Printf("loop: %x,%x\n", k, v)
 		if len(v) > 0 {
 			k = v[:len(v)-32]
 			v = v[len(v)-32:]
 		} else {
 			k, v = nil, nil
 		}
+		fmt.Printf("loop: %x,%x\n", k, v)
 
 		if k == nil || len(k) > c.i || !bytes.HasPrefix(k, c.parents[c.i]) {
 			if c.i == 1 {
@@ -729,7 +731,6 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 			}
 			continue
 		}
-
 		// if filter allow us, return. otherwise delete and go level-down
 		if c.filter(k) {
 			return k, v, nil
@@ -836,7 +837,7 @@ func (c *IHStorageCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, e
 	if k == nil {
 		return nil, nil, false, nil
 	}
-	c.cur = common.CopyBytes(k[1:])
+	c.cur = common.CopyBytes(k)
 	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
 }
 
@@ -898,7 +899,7 @@ func (c *IHStorageCursor) Next() (k, v []byte, isSeq bool, err error) {
 		return nil, nil, false, nil
 	}
 
-	c.cur = common.CopyBytes(k[1:])
+	c.cur = common.CopyBytes(k)
 	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
 }
 
