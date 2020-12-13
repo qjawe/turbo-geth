@@ -360,6 +360,14 @@ var BucketsConfigs = BucketsCfg{
 		Flags:               DupSort,
 		CustomDupComparator: DupCmpSuffix32,
 	},
+	IntermediateHashOfAccountBucket: {
+		Flags:               DupSort,
+		CustomDupComparator: DupCmpSuffix32,
+	},
+	IntermediateHashOfStorageBucket: {
+		Flags:               DupSort,
+		CustomDupComparator: DupCmpSuffix32,
+	},
 }
 
 func sortBuckets() {

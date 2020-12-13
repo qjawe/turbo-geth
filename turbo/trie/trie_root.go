@@ -200,14 +200,14 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 	}
 
 	accs, storages := NewStateCursor(tx.Cursor(dbutils.HashedAccountsBucket)), NewStateCursor(tx.Cursor(dbutils.HashedStorageBucket))
-	cursors := [161]ethdb.Cursor{}
+	cursors := [161]ethdb.CursorDupSort{}
 	for i := 0; i < 161; i++ {
-		cursors[i] = tx.Cursor(dbutils.IntermediateHashOfAccountBucket)
+		cursors[i] = tx.CursorDupSort(dbutils.IntermediateHashOfAccountBucket)
 	}
 	ih := IH(filter, cursors, l.hc)
-	cursorsS := [161]ethdb.Cursor{}
+	cursorsS := [161]ethdb.CursorDupSort{}
 	for i := 0; i < 161; i++ {
-		cursorsS[i] = tx.Cursor(dbutils.IntermediateHashOfStorageBucket)
+		cursorsS[i] = tx.CursorDupSort(dbutils.IntermediateHashOfStorageBucket)
 	}
 	ihStorage := IHStorage(filter, cursorsS, l.hc)
 
@@ -652,7 +652,7 @@ const IHDupKeyLen = 2 * (common.HashLength + common.IncarnationLength)
 
 // IHCursor - holds logic related to iteration over IH bucket
 type IHCursor struct {
-	c          [161]ethdb.Cursor
+	c          [161]ethdb.CursorDupSort
 	hc         HashCollector
 	filter     Filter
 	i          int
@@ -663,7 +663,7 @@ type IHCursor struct {
 	accWithInc []byte
 }
 
-func IH(f Filter, c [161]ethdb.Cursor, hc HashCollector) *IHCursor {
+func IH(f Filter, c [161]ethdb.CursorDupSort, hc HashCollector) *IHCursor {
 	ih := &IHCursor{c: c, filter: f, i: 1, hc: hc}
 	ih.parents[1] = []byte{}
 	return ih
@@ -684,7 +684,7 @@ func (c *IHCursor) First() (k, v []byte, isSeq bool, err error) {
 	if k == nil {
 		return nil, nil, false, nil
 	}
-	c.cur = common.CopyBytes(k[1:])
+	c.cur = common.CopyBytes(k)
 
 	return c.cur, common.CopyBytes(v), isSequence([]byte{0}, c.cur), nil
 }
@@ -709,9 +709,15 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 	if err != nil {
 		return []byte{}, nil, err
 	}
-
 	for {
-		if k == nil || len(k)-1 > c.i || !bytes.HasPrefix(k[1:], c.parents[c.i]) {
+		if len(v) > 0 {
+			k = v[:len(v)-32]
+			v = v[len(v)-32:]
+		} else {
+			k, v = nil, nil
+		}
+
+		if k == nil || len(k) > c.i || !bytes.HasPrefix(k, c.parents[c.i]) {
 			if c.i == 1 {
 				return nil, nil, nil
 			}
@@ -725,19 +731,19 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 		}
 
 		// if filter allow us, return. otherwise delete and go level-down
-		if c.filter(k[1:]) {
+		if c.filter(k) {
 			return k, v, nil
 		}
-
-		err = c.hc(k, nil)
+		k, v = common.CopyBytes(k), common.CopyBytes(v)
+		err = cursor.DeleteCurrent()
+		//	err = c.hc(k, nil)
 		if err != nil {
 			return []byte{}, nil, err
 		}
 		c.i++
-		c.parents[c.i] = k[1:]
+		c.parents[c.i] = k
 		cursor = c.c[c.i]
-		c.buf = append(append(c.buf[:0], uint8(c.i)), c.parents[c.i]...)
-		k, v, err = cursor.Seek(c.buf)
+		k, v, err = cursor.SeekBothRange([]byte{uint8(c.i)}, c.parents[c.i])
 		if err != nil {
 			return []byte{}, nil, err
 		}
@@ -752,9 +758,14 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 	}
 
 	for {
-		// if a and b don't form sequence, then iterate over all keys between a and b
+		if len(v) > 0 {
+			k = v[:len(v)-32]
+			v = v[len(v)-32:]
+		} else {
+			k, v = nil, nil
+		}
 
-		if k == nil || len(k)-1 > c.i || !bytes.HasPrefix(k[1:], c.parents[c.i]) {
+		if k == nil || len(k) > c.i || !bytes.HasPrefix(k, c.parents[c.i]) {
 			if c.i == 1 {
 				return nil, nil, nil
 			}
@@ -767,16 +778,20 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 			continue
 		}
 
-		// if filter allow us, return. otherwise go level-down
-		if c.filter(k[1:]) {
+		// if filter allow us, return. otherwise delete and go level-down
+		if c.filter(k) {
 			return k, v, nil
 		}
-
+		k, v = common.CopyBytes(k), common.CopyBytes(v)
+		err = cursor.DeleteCurrent()
+		//	err = c.hc(k, nil)
+		if err != nil {
+			return []byte{}, nil, err
+		}
 		c.i++
-		c.parents[c.i] = k[1:]
+		c.parents[c.i] = k
 		cursor = c.c[c.i]
-		c.buf = append(append(c.buf[:0], uint8(c.i)), c.parents[c.i]...)
-		k, v, err = cursor.Seek(c.buf)
+		k, v, err = cursor.SeekBothRange([]byte{uint8(c.i)}, c.parents[c.i])
 		if err != nil {
 			return []byte{}, nil, err
 		}
@@ -785,7 +800,7 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 
 // IHStorageCursor - holds logic related to iteration over IH bucket
 type IHStorageCursor struct {
-	c      [161]ethdb.Cursor
+	c      [161]ethdb.CursorDupSort
 	filter Filter
 	i      int
 	hc     HashCollector
@@ -797,7 +812,7 @@ type IHStorageCursor struct {
 	accWithInc []byte
 }
 
-func IHStorage(f Filter, c [161]ethdb.Cursor, hc HashCollector) *IHStorageCursor {
+func IHStorage(f Filter, c [161]ethdb.CursorDupSort, hc HashCollector) *IHStorageCursor {
 	ih := &IHStorageCursor{c: c, filter: f, i: 1, hc: hc}
 	ih.parents[1] = []byte{}
 	return ih
@@ -831,13 +846,16 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 	if err != nil {
 		return []byte{}, nil, err
 	}
-	ethdb.Walk(cursor, nil, 0, func(k, v []byte) (bool, error) {
-		fmt.Printf("%x\n", k)
-		return true, nil
-	})
-	fmt.Printf("seek: %x, %x\n", append([]byte{uint8(c.i)}, seek...), k)
+
 	for {
-		if k == nil || len(k)-1 > c.i || !bytes.HasPrefix(k[1:], c.parents[c.i]) {
+		if len(v) > 0 {
+			k = append(k[1:], v[:len(v)-32]...)
+			v = v[len(v)-32:]
+		} else {
+			k, v = nil, nil
+		}
+
+		if k == nil || len(k) > c.i || !bytes.HasPrefix(k, c.parents[c.i]) {
 			if c.i == 80 {
 				return nil, nil, nil
 			}
@@ -851,20 +869,19 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 		}
 
 		// if filter allow us, return. otherwise delete and go level-down
-		if c.filter(k[1:]) {
+		if c.filter(k) {
 			return k, v, nil
 		}
-
-		err = c.hc(k, nil)
+		k, v = common.CopyBytes(k), common.CopyBytes(v)
+		err = cursor.DeleteCurrent()
+		//	err = c.hc(k, nil)
 		if err != nil {
 			return []byte{}, nil, err
 		}
 		c.i++
-		c.parents[c.i] = k[1:]
+		c.parents[c.i] = k
 		cursor = c.c[c.i]
-		c.buf = c.buf[:0]
-		c.buf = append(append(c.buf, uint8(c.i)), c.parents[c.i]...)
-		k, v, err = cursor.Seek(c.buf)
+		k, v, err = cursor.SeekBothRange([]byte{uint8(c.i)}, c.parents[c.i])
 		if err != nil {
 			return []byte{}, nil, err
 		}
