@@ -685,7 +685,7 @@ func (c *IHCursor) First() (k, v []byte, isSeq bool, err error) {
 		return nil, nil, false, nil
 	}
 	c.cur = common.CopyBytes(k)
-	return c.cur, common.CopyBytes(v), isSequence([]byte{0}, c.cur), nil
+	return c.cur, v, isSequence([]byte{0}, c.cur), nil
 }
 
 func (c *IHCursor) Next() (k, v []byte, isSeq bool, err error) {
@@ -699,7 +699,7 @@ func (c *IHCursor) Next() (k, v []byte, isSeq bool, err error) {
 		return nil, nil, false, nil
 	}
 	c.cur = common.CopyBytes(k)
-	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
+	return c.cur, v, isSequence(c.prev, c.cur), nil
 }
 
 func (c *IHCursor) _first() (k, v []byte, err error) {
@@ -838,7 +838,7 @@ func (c *IHStorageCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, e
 		return nil, nil, false, nil
 	}
 	c.cur = common.CopyBytes(k)
-	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
+	return c.cur, v, isSequence(c.prev, c.cur), nil
 }
 
 func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
@@ -919,7 +919,7 @@ func (c *IHStorageCursor) Next() (k, v []byte, isSeq bool, err error) {
 	}
 
 	c.cur = common.CopyBytes(k)
-	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
+	return c.cur, v, isSequence(c.prev, c.cur), nil
 }
 
 func (c *IHStorageCursor) _next() (k, v []byte, err error) {
