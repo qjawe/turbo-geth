@@ -333,7 +333,6 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 	if err := l.receiver.Receive(CutoffStreamItem, nil, nil, nil, nil, nil, 0); err != nil {
 		return EmptyRoot, err
 	}
-	panic(1)
 	if !useExternalTx {
 		_, err := txDB.Commit()
 		if err != nil {
@@ -687,7 +686,7 @@ func (c *IHCursor) First() (k, v []byte, isSeq bool, err error) {
 	}
 	c.cur = common.CopyBytes(k)
 
-	return c.cur, common.CopyBytes(v), isSequence([]byte{0}, c.cur), nil
+	return c.cur, v, isSequence([]byte{0}, c.cur), nil
 }
 
 func (c *IHCursor) Next() (k, v []byte, isSeq bool, err error) {
@@ -701,7 +700,7 @@ func (c *IHCursor) Next() (k, v []byte, isSeq bool, err error) {
 		return nil, nil, false, nil
 	}
 	c.cur = common.CopyBytes(k)
-	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
+	return c.cur, v, isSequence(c.prev, c.cur), nil
 }
 
 func (c *IHCursor) _first() (k, v []byte, err error) {
@@ -783,7 +782,7 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 		if c.filter(k) {
 			return k, v, nil
 		}
-		k, v = common.CopyBytes(k), common.CopyBytes(v)
+		k = common.CopyBytes(k)
 		err = cursor.DeleteCurrent()
 		//	err = c.hc(k, nil)
 		if err != nil {
@@ -839,8 +838,8 @@ func (c *IHStorageCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, e
 	if k == nil {
 		return nil, nil, false, nil
 	}
-	c.cur = common.CopyBytes(k)
-	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
+	c.cur = k
+	return c.cur, v, isSequence(c.prev, c.cur), nil
 }
 
 func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
@@ -889,7 +888,7 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 		//if bytes.HasPrefix(c.parents[c.i], common.FromHex("030f0404050b01030c0d0a0b020a0f000e000b0100010e010d070304040d03020b0f0d0402030603090b000708010f080f0d0f0d01080c0d0d070f0d05050b0000000000000000000000000000000001")) {
 		//	fmt.Printf("5: %x,%x\n", k, v)
 		//}
-		k, v = common.CopyBytes(k), common.CopyBytes(v)
+		k = common.CopyBytes(k)
 		err = cursor.DeleteCurrent()
 		//	err = c.hc(k, nil)
 		if err != nil {
@@ -920,8 +919,8 @@ func (c *IHStorageCursor) Next() (k, v []byte, isSeq bool, err error) {
 		return nil, nil, false, nil
 	}
 
-	c.cur = common.CopyBytes(k)
-	return c.cur, common.CopyBytes(v), isSequence(c.prev, c.cur), nil
+	c.cur = k
+	return c.cur, v, isSequence(c.prev, c.cur), nil
 }
 
 func (c *IHStorageCursor) _next() (k, v []byte, err error) {
