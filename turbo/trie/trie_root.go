@@ -666,6 +666,7 @@ type IHCursor struct {
 func IH(f Filter, c [161]ethdb.CursorDupSort, hc HashCollector) *IHCursor {
 	ih := &IHCursor{c: c, filter: f, i: 1, hc: hc}
 	ih.parents[1] = []byte{}
+	ih.buf = make([]byte, 1)
 	return ih
 }
 
@@ -725,7 +726,7 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 			}
 			c.i--
 			cursor = c.c[c.i]
-			k, v, err = cursor.Next()
+			k, v, err = cursor.NextDup()
 			if err != nil {
 				return []byte{}, nil, err
 			}
@@ -744,7 +745,8 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 		c.i++
 		c.parents[c.i] = k
 		cursor = c.c[c.i]
-		k, v, err = cursor.SeekBothRange([]byte{uint8(c.i)}, c.parents[c.i])
+		c.buf[0] = uint8(c.i)
+		k, v, err = cursor.SeekBothRange(c.buf, c.parents[c.i])
 		if err != nil {
 			return []byte{}, nil, err
 		}
@@ -753,7 +755,7 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 
 func (c *IHCursor) _next() (k, v []byte, err error) {
 	cursor := c.c[c.i]
-	k, v, err = cursor.Next()
+	k, v, err = cursor.NextDup()
 	if err != nil {
 		return []byte{}, nil, err
 	}
@@ -772,7 +774,7 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 			}
 			c.i--
 			cursor = c.c[c.i]
-			k, v, err = cursor.Next()
+			k, v, err = cursor.NextDup()
 			if err != nil {
 				return []byte{}, nil, err
 			}
@@ -792,7 +794,8 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 		c.i++
 		c.parents[c.i] = k
 		cursor = c.c[c.i]
-		k, v, err = cursor.SeekBothRange([]byte{uint8(c.i)}, c.parents[c.i])
+		c.buf[0] = uint8(c.i)
+		k, v, err = cursor.SeekBothRange(c.buf, c.parents[c.i])
 		if err != nil {
 			return []byte{}, nil, err
 		}
@@ -816,6 +819,7 @@ type IHStorageCursor struct {
 func IHStorage(f Filter, c [161]ethdb.CursorDupSort, hc HashCollector) *IHStorageCursor {
 	ih := &IHStorageCursor{c: c, filter: f, i: 1, hc: hc}
 	ih.parents[1] = []byte{}
+	ih.buf = make([]byte, 1+IHDupKeyLen)
 	return ih
 }
 
@@ -843,7 +847,10 @@ func (c *IHStorageCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, e
 
 func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 	cursor := c.c[c.i]
-	k, v, err = cursor.SeekExact(append([]byte{uint8(c.i)}, seek...))
+	c.buf[0] = uint8(c.i)
+	copy(c.buf[1:], seek)
+	c.buf = c.buf[:1+len(seek)]
+	k, v, err = cursor.SeekExact(c.buf)
 	if err != nil {
 		return []byte{}, nil, err
 	}
@@ -862,7 +869,7 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 			}
 			c.i--
 			cursor = c.c[c.i]
-			k, v, err = cursor.Next()
+			k, v, err = cursor.NextNoDup()
 			if err != nil {
 				return []byte{}, nil, err
 			}
@@ -882,7 +889,12 @@ func (c *IHStorageCursor) _seek(seek []byte) (k, v []byte, err error) {
 		c.i++
 		c.parents[c.i] = k
 		cursor = c.c[c.i]
-		k, v, err = cursor.SeekBothRange([]byte{uint8(c.i)}, c.parents[c.i])
+		c.buf[0] = uint8(c.i)
+		to := c.parents[c.i][IHDupKeyLen:]
+		if len(to) == 0 {
+			to = []byte{0}
+		}
+		k, v, err = cursor.SeekBothRange(c.buf, to)
 		if err != nil {
 			return []byte{}, nil, err
 		}
@@ -911,13 +923,20 @@ func (c *IHStorageCursor) _next() (k, v []byte, err error) {
 	}
 
 	for {
+		if len(v) > 0 {
+			k = append(k[1:], v[:len(v)-32]...)
+			v = v[len(v)-32:]
+		} else {
+			k, v = nil, nil
+		}
+
 		if k == nil || len(k)-1 > c.i || !bytes.HasPrefix(k[1:], c.parents[c.i]) {
 			if c.i == 80 {
 				return nil, nil, nil
 			}
 			c.i--
 			cursor = c.c[c.i]
-			k, v, err = cursor.Next()
+			k, v, err = cursor.NextDup()
 			if err != nil {
 				return []byte{}, nil, err
 			}
@@ -925,7 +944,7 @@ func (c *IHStorageCursor) _next() (k, v []byte, err error) {
 		}
 
 		// if filter allow us, return. otherwise delete and go level-down
-		if c.filter(k[1:]) {
+		if c.filter(k) {
 			return k, v, nil
 		}
 
@@ -935,10 +954,14 @@ func (c *IHStorageCursor) _next() (k, v []byte, err error) {
 			return []byte{}, nil, err
 		}
 		c.i++
-		c.parents[c.i] = k[1:]
+		c.parents[c.i] = k
 		cursor = c.c[c.i]
-		c.buf = append(append(c.buf[:0], uint8(c.i)), c.parents[c.i]...)
-		k, v, err = cursor.Seek(c.buf)
+		c.buf[0] = uint8(c.i)
+		to := c.parents[c.i][IHDupKeyLen:]
+		if len(to) == 0 {
+			to = []byte{0}
+		}
+		k, v, err = cursor.SeekBothRange(c.buf, to)
 		if err != nil {
 			return []byte{}, nil, err
 		}
