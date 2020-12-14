@@ -19,7 +19,8 @@ import (
 )
 
 var stateBuckets = []string{
-	dbutils.CurrentStateBucketOld2,
+	dbutils.HashedAccountsBucket,
+	dbutils.HashedStorageBucket,
 	dbutils.AccountChangeSetBucket,
 	dbutils.StorageChangeSetBucket,
 	dbutils.ContractCodeBucket,
@@ -29,7 +30,8 @@ var stateBuckets = []string{
 	dbutils.PlainContractCodeBucket,
 	dbutils.IncarnationMapBucket,
 	dbutils.CodeBucket,
-	dbutils.IntermediateTrieHashBucketOld2,
+	dbutils.IntermediateHashOfAccountBucket,
+	dbutils.IntermediateHashOfStorageBucket,
 	dbutils.AccountsHistoryBucket,
 	dbutils.StorageHistoryBucket,
 	dbutils.TxLookupPrefix,
@@ -262,7 +264,7 @@ func fToMdbx(ctx context.Context, to string) error {
 	//_ = dstTx.(ethdb.BucketMigrator).ClearBucket(dbutils.CurrentStateBucketOld2)
 
 	fileScanner := bufio.NewScanner(file)
-	c := dstTx.CursorDupSort(dbutils.CurrentStateBucketOld2)
+	c := dstTx.CursorDupSort(dbutils.HashedAccountsBucket)
 	for fileScanner.Scan() {
 		kv := strings.Split(fileScanner.Text(), ",")
 		k, _ := hex.DecodeString(kv[0])

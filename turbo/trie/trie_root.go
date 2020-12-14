@@ -73,12 +73,10 @@ Then delete this account (SELFDESTRUCT).
 //
 // Each intermediate hash key firstly pass to RetainDecider, only if it returns "false" - such IH can be used.
 type FlatDBTrieLoader struct {
-	logPrefix                string
-	trace                    bool
-	stateBucket              string
-	intermediateHashesBucket string
-	rd                       RetainDecider
-	accAddrHashWithInc       [40]byte // Concatenation of addrHash of the currently build account with its incarnation encoding
+	logPrefix          string
+	trace              bool
+	rd                 RetainDecider
+	accAddrHashWithInc [40]byte // Concatenation of addrHash of the currently build account with its incarnation encoding
 
 	ihSeek, accSeek, storageSeek []byte
 
@@ -125,12 +123,10 @@ func NewRootHashAggregator() *RootHashAggregator {
 	}
 }
 
-func NewFlatDBTrieLoader(logPrefix, stateBucket, intermediateHashesBucket string) *FlatDBTrieLoader {
+func NewFlatDBTrieLoader(logPrefix string) *FlatDBTrieLoader {
 	return &FlatDBTrieLoader{
-		logPrefix:                logPrefix,
-		defaultReceiver:          NewRootHashAggregator(),
-		stateBucket:              stateBucket,
-		intermediateHashesBucket: intermediateHashesBucket,
+		logPrefix:       logPrefix,
+		defaultReceiver: NewRootHashAggregator(),
 	}
 }
 
@@ -202,11 +198,8 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 
 	accs, storages := NewStateCursor(tx.Cursor(dbutils.HashedAccountsBucket)), NewStateCursor(tx.Cursor(dbutils.HashedStorageBucket))
 	ihAccC, ihStorageC := tx.Cursor(dbutils.IntermediateHashOfAccountBucket), tx.Cursor(dbutils.IntermediateHashOfStorageBucket)
-	var filter = func(k []byte) bool {
-		return !l.rd.Retain(k)
-	}
-	ih := IH(filter, ihAccC, l.hc)
-	ihStorage := IH(filter, ihStorageC, l.hc)
+	ih := IH(l.rd, ihAccC, l.hc)
+	ihStorage := IH(l.rd, ihStorageC, l.hc)
 
 	logEvery := time.NewTicker(30 * time.Second)
 	defer logEvery.Stop()
@@ -225,11 +218,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 			continue
 		}
 
-		nextHex, _ := dbutils.NextSubtreeHex(ih.PrevKey())
-		if len(nextHex)%2 == 1 {
-			nextHex = append(nextHex, 0)
-		}
-		CompressNibbles(nextHex, &l.accSeek)
+		CompressNibbles(ih.FirstNotCoveredPrefix(), &l.accSeek)
 		if len(ih.PrevKey()) > 0 && len(l.accSeek) == 0 {
 			break
 		}
@@ -278,11 +267,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 				if len(ihStorage.PrevKey()) == 0 {
 					l.storageSeek = append(l.storageSeek[:0], l.accAddrHashWithInc[:]...)
 				} else {
-					nextHex2, _ := dbutils.NextSubtreeHex(ihStorage.PrevKey())
-					if len(nextHex2)%2 == 1 {
-						nextHex2 = append(nextHex2, 0)
-					}
-					CompressNibbles(nextHex2, &l.storageSeek)
+					CompressNibbles(ihStorage.FirstNotCoveredPrefix(), &l.storageSeek)
 				}
 
 				if len(ihStorage.PrevKey()) > 0 && len(l.storageSeek) == 0 {
@@ -337,7 +322,6 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 			return EmptyRoot, err
 		}
 	}
-
 	return l.receiver.Root(), nil
 }
 
@@ -628,7 +612,7 @@ func (r *RootHashAggregator) genStructAccount() error {
 func (r *RootHashAggregator) saveValueAccount(isIH bool, v *accounts.Account, h []byte) error {
 	r.wasIH = isIH
 	if isIH {
-		r.hashAccount = common.BytesToHash(h)
+		r.hashAccount.SetBytes(h)
 		return nil
 	}
 	r.a.Copy(v)
@@ -649,17 +633,19 @@ const IHDupKeyLen = 2 * (common.HashLength + common.IncarnationLength)
 
 // IHCursor - holds logic related to iteration over IH bucket
 type IHCursor struct {
-	c      ethdb.Cursor
-	hc     HashCollector
-	filter Filter
-	i      int
-	prev   []byte
-	cur    []byte
-	next   []byte
+	c                     ethdb.Cursor
+	hc                    HashCollector
+	rd                    RetainDecider
+	i                     int
+	prev                  []byte
+	cur                   []byte
+	next                  []byte
+	amountOfSkips         int
+	firstNotCoveredPrefix []byte
 }
 
-func IH(f Filter, c ethdb.Cursor, hc HashCollector) *IHCursor {
-	ih := &IHCursor{c: c, filter: f, i: 1, next: make([]byte, 256), hc: hc}
+func IH(f RetainDecider, c ethdb.Cursor, hc HashCollector) *IHCursor {
+	ih := &IHCursor{c: c, rd: f, i: 1, firstNotCoveredPrefix: make([]byte, 0, 256), next: make([]byte, 256), hc: hc}
 	return ih
 }
 
@@ -667,18 +653,25 @@ func (c *IHCursor) PrevKey() []byte {
 	return c.prev
 }
 
+func (c *IHCursor) FirstNotCoveredPrefix() []byte {
+	_ = dbutils.NextSubtreeHex2(c.prev, &c.firstNotCoveredPrefix)
+	if len(c.firstNotCoveredPrefix)%2 == 1 {
+		c.firstNotCoveredPrefix = append(c.firstNotCoveredPrefix, 0)
+	}
+	return c.firstNotCoveredPrefix
+}
+
 func (c *IHCursor) First() (k, v []byte, isSeq bool, err error) {
 	k, v, err = c._first()
 	if err != nil {
 		return []byte{}, nil, false, err
 	}
-	c.prev = []byte{}
 
 	if k == nil {
 		return nil, nil, false, nil
 	}
-	c.cur = common.CopyBytes(k)
-	return c.cur, v, isSequence([]byte{0}, c.cur), nil
+	c.cur = k
+	return c.cur, v, isSequence(c.prev, c.cur), nil
 }
 
 func (c *IHCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, err error) {
@@ -686,13 +679,14 @@ func (c *IHCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, err erro
 	if err != nil {
 		return []byte{}, nil, false, err
 	}
-	c.prev = common.CopyBytes(seek)
+	c.prev = append(c.prev[:0], seek...)
 	c.prev[len(c.prev)-1]--
 
 	if k == nil {
 		return nil, nil, false, nil
 	}
-	c.cur = common.CopyBytes(k)
+
+	c.cur = k
 	return c.cur, v, isSequence(c.prev, c.cur), nil
 }
 
@@ -707,12 +701,13 @@ func (c *IHCursor) Next() (k, v []byte, isSeq bool, err error) {
 	if err != nil {
 		return []byte{}, nil, false, err
 	}
-	c.prev = c.cur
+
+	c.prev = append(c.prev[:0], c.cur...)
 	if k == nil {
 		c.cur = nil
 		return nil, nil, isSequence(c.prev, c.cur), nil
 	}
-	c.cur = common.CopyBytes(k)
+	c.cur = k
 	return c.cur, v, isSequence(c.prev, c.cur), nil
 }
 
@@ -726,9 +721,11 @@ func (c *IHCursor) _first() (k, v []byte, err error) {
 		return nil, nil, nil
 	}
 
-	if c.filter(k) { // if filter allow us, return. otherwise delete and go ahead.
+	if !c.rd.Retain(k) { // if rd allow us, return. otherwise delete and go ahead.
 		return k, v, nil
 	}
+
+	c.amountOfSkips++
 
 	err = c.hc(k, nil)
 	if err != nil {
@@ -747,9 +744,11 @@ func (c *IHCursor) _seek(seek []byte) (k, v []byte, err error) {
 		return nil, nil, nil
 	}
 
-	if c.filter(k) { // if filter allow us, return. otherwise delete and go ahead.
+	if !c.rd.Retain(k) { // if rd allow us, return. otherwise delete and go ahead.
 		return k, v, nil
 	}
+
+	c.amountOfSkips++
 
 	err = c.hc(k, nil)
 	if err != nil {
@@ -770,10 +769,11 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 			return nil, nil, nil
 		}
 
-		if c.filter(k) { // if filter allow us, return. otherwise delete and go ahead.
+		if !c.rd.Retain(k) { // if rd allow us, return. otherwise delete and go ahead.
 			return k, v, nil
 		}
 
+		c.amountOfSkips++
 		err = c.hc(k, nil)
 		if err != nil {
 			return []byte{}, nil, err
@@ -801,12 +801,12 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 */
 func isSequence(prev []byte, next []byte) bool {
 	isSequence := false
-	prev, ok := dbutils.NextSubtreeHex(prev)
-	if !ok {
+	ok := dbutils.NextSubtreeHex2(prev, &isSequenceBuf)
+	if len(prev) > 0 && !ok {
 		return true
 	}
-	if bytes.HasPrefix(next, prev) {
-		tail := next[len(prev):] // if tail has only zeroes, then no state records can be between fstl.nextHex and fstl.ihK
+	if bytes.HasPrefix(next, isSequenceBuf) {
+		tail := next[len(isSequenceBuf):] // if tail has only zeroes, then no state records can be between fstl.nextHex and fstl.ihK
 		isSequence = true
 		for _, n := range tail {
 			if n != 0 {
@@ -818,6 +818,8 @@ func isSequence(prev []byte, next []byte) bool {
 
 	return isSequence
 }
+
+var isSequenceBuf = make([]byte, 256)
 
 type StateCursor struct {
 	c    ethdb.Cursor

@@ -238,7 +238,7 @@ func loopIh(db ethdb.Database, ctx context.Context) error {
 		return err
 	}
 	execStage := progress(stages.HashState)
-	to := execStage.BlockNumber - 1
+	to := execStage.BlockNumber - 100
 	_ = st.SetCurrentStage(stages.HashState)
 	u := &stagedsync.UnwindState{Stage: stages.HashState, UnwindPoint: to}
 	if err = stagedsync.UnwindHashStateStage(u, progress(stages.HashState), tx, path.Join(datadir, etl.TmpDirName), ch); err != nil {

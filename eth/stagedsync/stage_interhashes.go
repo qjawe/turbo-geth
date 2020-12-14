@@ -81,7 +81,17 @@ func SpawnIntermediateHashesStage(s *StageState, db ethdb.Database, checkRoot bo
 func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot bool, tmpdir string, expectedRootHash common.Hash, quit <-chan struct{}) error {
 	log.Info(fmt.Sprintf("[%s] Regeneration intermediate hashes started", logPrefix))
 	// Clear IH bucket
-	c := db.(ethdb.HasTx).Tx().Cursor(dbutils.IntermediateTrieHashBucketOld2)
+	c := db.(ethdb.HasTx).Tx().Cursor(dbutils.IntermediateHashOfAccountBucket)
+	for k, _, err := c.First(); k != nil; k, _, err = c.First() {
+		if err != nil {
+			return err
+		}
+		if err = c.DeleteCurrent(); err != nil {
+			return err
+		}
+	}
+	c.Close()
+	c = db.(ethdb.HasTx).Tx().Cursor(dbutils.IntermediateHashOfStorageBucket)
 	for k, _, err := c.First(); k != nil; k, _, err = c.First() {
 		if err != nil {
 			return err
@@ -102,7 +112,7 @@ func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 		}
 		return storageIHCollector.Collect(keyHex, hash)
 	}
-	loader := trie.NewFlatDBTrieLoader(logPrefix, dbutils.CurrentStateBucketOld2, dbutils.IntermediateTrieHashBucketOld2)
+	loader := trie.NewFlatDBTrieLoader(logPrefix)
 	if err := loader.Reset(trie.NewRetainList(0), hashCollector /* HashCollector */, false); err != nil {
 		return err
 	}
@@ -278,7 +288,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 		}
 		return storageIHCollector.Collect(keyHex, hash)
 	}
-	loader := trie.NewFlatDBTrieLoader(logPrefix, dbutils.CurrentStateBucketOld2, dbutils.IntermediateTrieHashBucketOld2)
+	loader := trie.NewFlatDBTrieLoader(logPrefix)
 	// hashCollector in the line below will collect deletes
 	if err := loader.Reset(unfurl, hashCollector, false); err != nil {
 		return err
@@ -385,7 +395,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 		}
 		return storageIHCollector.Collect(keyHex, hash)
 	}
-	loader := trie.NewFlatDBTrieLoader(logPrefix, dbutils.CurrentStateBucketOld2, dbutils.IntermediateTrieHashBucketOld2)
+	loader := trie.NewFlatDBTrieLoader(logPrefix)
 	// hashCollector in the line below will collect deletes
 	if err := loader.Reset(unfurl, hashCollector, false); err != nil {
 		return err
@@ -426,9 +436,9 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 
 func ResetHashState(db ethdb.Database) error {
 	if err := db.(ethdb.BucketsMigrator).ClearBuckets(
-		dbutils.CurrentStateBucketOld2,
+		dbutils.HashedAccountsBucket,
+		dbutils.HashedStorageBucket,
 		dbutils.ContractCodeBucket,
-		dbutils.IntermediateTrieHashBucketOld2,
 		dbutils.HashedAccountsBucket,
 		dbutils.HashedStorageBucket,
 		dbutils.IntermediateHashOfAccountBucket,

@@ -902,6 +902,9 @@ func TestNextSubtreeHex(t *testing.T) {
 	}
 
 	cases := []tc{
+		{prev: "", next: "00", expect: true},
+		{prev: "", next: "0000", expect: true},
+		{prev: "", next: "01", expect: false},
 		{prev: "00", next: "01", expect: true},
 		{prev: "01020304", next: "01020305", expect: true},
 		{prev: "01020f0f", next: "0103", expect: true},
@@ -909,6 +912,7 @@ func TestNextSubtreeHex(t *testing.T) {
 		{prev: "01020304", next: "05060708", expect: false},
 		{prev: "0f0f0d", next: "0f0f0e", expect: true},
 		{prev: "0f", next: "", expect: true},
+		{prev: "0f01", next: "", expect: false},
 	}
 
 	for _, tc := range cases {
@@ -937,51 +941,43 @@ func TestIHCursor(t *testing.T) {
 	defer tx.Rollback()
 
 	cursor := tx.Cursor(dbutils.IntermediateHashOfAccountBucket)
-	var filter = func(k []byte) bool {
-		if bytes.Equal(k, common.FromHex("01")) {
-			return false
-		}
-		if bytes.Equal(k, common.FromHex("0101")) {
-			return false
-		}
-		if bytes.Equal(k, common.FromHex(acc)) {
-			return false
-		}
-		if bytes.Equal(k, common.FromHex(acc+"01")) {
-			return false
-		}
-		return true
-	}
-	ih := IH(filter, cursor, func(keyHex []byte, hash []byte) error {
+	rl := NewRetainList(0)
+	rl.AddHex(common.FromHex("01"))
+	rl.AddHex(common.FromHex("0101"))
+	rl.AddHex(common.FromHex(acc))
+	rl.AddHex(common.FromHex(acc + "01"))
+	ih := IH(rl, cursor, func(keyHex []byte, hash []byte) error {
 		return nil
 	})
 	k, _, isSeq, _ := ih.First()
-	fmt.Printf("1: %x, %t\n", k, isSeq)
+	assert.Equal(t, common.FromHex("00"), k)
+	assert.True(t, isSeq)
 	k, _, isSeq, _ = ih.Next()
-	fmt.Printf("2: %x, %t\n", k, isSeq)
+	assert.Equal(t, common.FromHex("0100"), k)
+	assert.True(t, isSeq)
 	k, _, isSeq, _ = ih.Next()
-	fmt.Printf("3: %x, %t\n", k, isSeq)
+	assert.Equal(t, common.FromHex("0102"), k)
+	assert.False(t, isSeq)
 	k, _, isSeq, _ = ih.Next()
-	fmt.Printf("4: %x, %t\n", k, isSeq)
+	assert.Equal(t, common.FromHex("02"), k)
+	assert.False(t, isSeq)
 	k, _, isSeq, _ = ih.Next()
-	fmt.Printf("5: %x, %t\n", k, isSeq)
-	k, _, isSeq, _ = ih.Next()
-	fmt.Printf("6: %x, %t\n", k, isSeq)
-	k, _, isSeq, _ = ih.Next()
-	fmt.Printf("7: %x, %t\n", k, isSeq)
-	k, _, isSeq, _ = ih.Next()
-	fmt.Printf("8: %x, %t\n", k, isSeq)
+	assert.Nil(t, k)
+	assert.False(t, isSeq)
 
 	cursorS := tx.Cursor(dbutils.IntermediateHashOfStorageBucket)
-	ihStorage := IH(filter, cursorS, func(keyHex []byte, hash []byte) error {
+	ihStorage := IH(rl, cursorS, func(keyHex []byte, hash []byte) error {
 		return nil
 	})
 
 	k, _, isSeq, _ = ihStorage.SeekToAccount(common.FromHex(acc))
-	fmt.Printf("11: %x, %t\n", k, isSeq)
+	assert.Equal(t, common.FromHex(acc+"00"), k)
+	assert.True(t, isSeq)
 	k, _, isSeq, _ = ihStorage.Next()
-	fmt.Printf("12: %x, %t\n", k, isSeq)
+	assert.Equal(t, common.FromHex(acc+"02"), k)
+	assert.False(t, isSeq)
 	k, _, isSeq, _ = ihStorage.Next()
-	fmt.Printf("13: %x, %t\n", k, isSeq)
+	assert.Nil(t, k)
+	assert.False(t, isSeq)
 
 }
