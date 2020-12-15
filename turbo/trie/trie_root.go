@@ -151,25 +151,23 @@ func (l *FlatDBTrieLoader) SetStreamReceiver(receiver StreamReceiver) {
 
 // CalcTrieRoot algo:
 //	for iterateIHOfAccounts {
-//		if isSequence {
-//			use(IH)
-//			continue
-//		}
+//		if isDenseSequence
+//          goto SkipAccounts
 //
 //		for iterateAccounts from prevIH to currentIH {
 //			use(account)
 //			for iterateIHOfStorage within accountWithIncarnation{
-//				if isSequence {
-//					use(ihStorage)
-//					continue
-//				}
+//				if isDenseSequence
+//					goto SkipStorage
 //
 //				for iterateStorage from prevIHOfStorage to currentIHOfStorage {
 //					use(storage)
 //				}
+//            SkipStorage:
 //				use(ihStorage)
 //			}
 //		}
+//    SkipAccounts:
 //		use(IH)
 //	}
 func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{}) (common.Hash, error) {
@@ -204,22 +202,17 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 	logEvery := time.NewTicker(30 * time.Second)
 	defer logEvery.Stop()
 
-	for ihK, ihV, isIHSequence, err := ih.First(); ; ihK, ihV, isIHSequence, err = ih.Next() { // no loop termination is at he end of loop
+	for ihK, ihV, ihDenseSequence, err := ih.First(); ; ihK, ihV, ihDenseSequence, err = ih.Next() { // no loop termination is at he end of loop
 		if err != nil {
 			return EmptyRoot, err
 		}
-		if isIHSequence {
-			if ihK == nil {
-				break
-			}
-			if err = l.receiver.Receive(AHashStreamItem, ihK, nil, nil, nil, ihV, 0); err != nil {
-				return EmptyRoot, err
-			}
-			continue
+		if ihDenseSequence {
+			goto SkipAccounts
 		}
 
 		CompressNibbles(ih.FirstNotCoveredPrefix(), &l.accSeek)
 		if len(ih.PrevKey()) > 0 && len(l.accSeek) == 0 {
+			panic(2)
 			break
 		}
 
@@ -249,28 +242,17 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 			binary.BigEndian.PutUint64(l.accAddrHashWithInc[32:], l.accountValue.Incarnation)
 			DecompressNibbles(l.accAddrHashWithInc[:], &l.ihSeek)
 
-			for ihKS, ihVS, isSeqS, err2 := ihStorage.SeekToAccount(l.ihSeek); ; ihKS, ihVS, isSeqS, err2 = ihStorage.Next() {
+			for ihKS, ihVS, denseSequence, err2 := ihStorage.SeekToAccount(l.ihSeek); ; ihKS, ihVS, denseSequence, err2 = ihStorage.Next() {
 				if err2 != nil {
 					return EmptyRoot, err2
 				}
-
-				if isSeqS {
-					if ihKS == nil {
-						break
-					}
-					if err = l.receiver.Receive(SHashStreamItem, nil, ihKS, nil, nil, ihVS, 0); err != nil {
-						return EmptyRoot, err
-					}
-					continue
+				if denseSequence {
+					goto SkipStorage
 				}
 
-				if len(ihStorage.PrevKey()) == 0 {
-					l.storageSeek = append(l.storageSeek[:0], l.accAddrHashWithInc[:]...)
-				} else {
-					CompressNibbles(ihStorage.FirstNotCoveredPrefix(), &l.storageSeek)
-				}
-
+				CompressNibbles(ihStorage.FirstNotCoveredPrefix(), &l.storageSeek)
 				if len(ihStorage.PrevKey()) > 0 && len(l.storageSeek) == 0 {
+					panic(1)
 					break
 				}
 				for kS, kHexS, vS, err3 := storages.Seek(l.storageSeek); kS != nil; kS, kHexS, vS, err3 = storages.Next() {
@@ -287,6 +269,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 					}
 				}
 
+			SkipStorage:
 				if len(ihKS) == 0 || !bytes.HasPrefix(ihKS, l.ihSeek) { // Loop termination
 					break
 				}
@@ -303,6 +286,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 			}
 		}
 
+	SkipAccounts:
 		if len(ihK) == 0 { // Loop termination
 			break
 		}
@@ -654,14 +638,14 @@ func (c *IHCursor) PrevKey() []byte {
 }
 
 func (c *IHCursor) FirstNotCoveredPrefix() []byte {
-	_ = dbutils.NextSubtreeHex2(c.prev, &c.firstNotCoveredPrefix)
+	_ = dbutils.NextNibblesSubtree(c.prev, &c.firstNotCoveredPrefix)
 	if len(c.firstNotCoveredPrefix)%2 == 1 {
 		c.firstNotCoveredPrefix = append(c.firstNotCoveredPrefix, 0)
 	}
 	return c.firstNotCoveredPrefix
 }
 
-func (c *IHCursor) First() (k, v []byte, isSeq bool, err error) {
+func (c *IHCursor) First() (k, v []byte, denseSequence bool, err error) {
 	k, v, err = c._first()
 	if err != nil {
 		return []byte{}, nil, false, err
@@ -671,7 +655,7 @@ func (c *IHCursor) First() (k, v []byte, isSeq bool, err error) {
 		return nil, nil, false, nil
 	}
 	c.cur = k
-	return c.cur, v, isSequence(c.prev, c.cur), nil
+	return c.cur, v, isDenseSequence(c.prev, c.cur), nil
 }
 
 func (c *IHCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, err error) {
@@ -687,11 +671,11 @@ func (c *IHCursor) SeekToAccount(seek []byte) (k, v []byte, isSeq bool, err erro
 	}
 
 	c.cur = k
-	return c.cur, v, isSequence(c.prev, c.cur), nil
+	return c.cur, v, isDenseSequence(c.prev, c.cur), nil
 }
 
 func (c *IHCursor) Next() (k, v []byte, isSeq bool, err error) {
-	ok := dbutils.NextSubtreeHex2(c.cur, &c.next)
+	ok := dbutils.NextNibblesSubtree(c.cur, &c.next)
 	if !ok {
 		c.prev = c.cur
 		c.cur = nil
@@ -705,10 +689,10 @@ func (c *IHCursor) Next() (k, v []byte, isSeq bool, err error) {
 	c.prev = append(c.prev[:0], c.cur...)
 	if k == nil {
 		c.cur = nil
-		return nil, nil, isSequence(c.prev, c.cur), nil
+		return nil, nil, isDenseSequence(c.prev, c.cur), nil
 	}
 	c.cur = k
-	return c.cur, v, isSequence(c.prev, c.cur), nil
+	return c.cur, v, isDenseSequence(c.prev, c.cur), nil
 }
 
 func (c *IHCursor) _first() (k, v []byte, err error) {
@@ -787,7 +771,8 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 }
 
 /*
-	Sequence - if between 2 IH records not possible insert any state record - then they form "sequence"
+	Dense Sequence - if between 2 IH records not possible insert any state record - then they form "dense sequence"
+	If 2 IH records form Dense Sequence - then no reason to iterate over state - just use IH one after another
 	Example1:
 		1234
 		1235
@@ -799,9 +784,9 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 		13000000
 	If 2 IH records form "sequence" then it can be consumed without moving StateCursor
 */
-func isSequence(prev []byte, next []byte) bool {
+func isDenseSequence(prev []byte, next []byte) bool {
 	isSequence := false
-	ok := dbutils.NextSubtreeHex2(prev, &isSequenceBuf)
+	ok := dbutils.NextNibblesSubtree(prev, &isSequenceBuf)
 	if len(prev) > 0 && !ok {
 		return true
 	}

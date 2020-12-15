@@ -916,7 +916,7 @@ func TestNextSubtreeHex(t *testing.T) {
 	}
 
 	for _, tc := range cases {
-		res := isSequence(common.FromHex(tc.prev), common.FromHex(tc.next))
+		res := isDenseSequence(common.FromHex(tc.prev), common.FromHex(tc.next))
 		assert.Equal(tc.expect, res, "%s, %s", tc.prev, tc.next)
 	}
 }
