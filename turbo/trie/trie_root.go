@@ -768,6 +768,35 @@ func (c *IHCursor) _next() (k, v []byte, err error) {
 	}
 }
 
+// IHInMem - holds logic related to iteration over IH bucket
+type IHInMem struct {
+	keys   [][]byte
+	values [][]byte
+	i      int
+}
+
+func (c *IHInMem) Seek(seek []byte) (k, v []byte) {
+	// Adjust "GT" if necessary
+	for c.i < len(c.keys) && bytes.Compare(c.keys[c.i], seek) < 0 {
+		c.i++
+	}
+	if c.i == len(c.keys) && bytes.Compare(c.keys[c.i], seek) <= 0 {
+		c.i++
+	}
+	if c.i >= len(c.keys) {
+		return nil, nil
+	}
+	return c.keys[c.i], c.keys[c.i]
+}
+
+func (c *IHInMem) Next() (k, v []byte) {
+	c.i++
+	if c.i >= len(c.keys) {
+		return nil, nil
+	}
+	return c.keys[c.i], c.keys[c.i]
+}
+
 /*
 	Dense Sequence - if between 2 IH records not possible insert any state record - then they form "dense sequence"
 	If 2 IH records form Dense Sequence - then no reason to iterate over state - just use IH one after another

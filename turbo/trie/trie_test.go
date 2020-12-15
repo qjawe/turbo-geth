@@ -981,3 +981,44 @@ func TestIHCursor(t *testing.T) {
 	assert.False(t, isSeq)
 
 }
+
+func TestIHInMem(t *testing.T) {
+	c := &IHInMem{keys: [][]byte{}, values: [][]byte{}}
+	for _, k := range []string{"00", "0001", "01", "0100", "0101", "0102", "02"} {
+		kk := common.FromHex(k)
+		c.keys = append(c.keys, kk)
+		c.values = append(c.values, kk)
+	}
+
+	k, _ := c.Seek([]byte{})
+	assert.Equal(t, common.FromHex("00"), k)
+	k, _ = c.Next()
+	assert.Equal(t, common.FromHex("0001"), k)
+	k, _ = c.Next()
+	assert.Equal(t, common.FromHex("01"), k)
+	k, _ = c.Next()
+	assert.Equal(t, common.FromHex("0100"), k)
+	k, _ = c.Next()
+	assert.Equal(t, common.FromHex("0101"), k)
+	k, _ = c.Next()
+	assert.Equal(t, common.FromHex("0102"), k)
+	k, _ = c.Next()
+	assert.Equal(t, common.FromHex("02"), k)
+	k, _ = c.Next()
+	assert.Nil(t, k)
+
+	c.i = 0
+	k, _ = c.Seek(common.FromHex("0000"))
+	assert.Equal(t, common.FromHex("0001"), k)
+	k, _ = c.Seek(common.FromHex("0000"))
+	assert.Equal(t, common.FromHex("0001"), k)
+	k, _ = c.Seek(common.FromHex("01"))
+	assert.Equal(t, common.FromHex("01"), k)
+	k, _ = c.Seek(common.FromHex("01"))
+	assert.Equal(t, common.FromHex("01"), k)
+	k, _ = c.Seek(common.FromHex("010f"))
+	assert.Equal(t, common.FromHex("02"), k)
+	k, _ = c.Seek(common.FromHex("010f0f"))
+	assert.Equal(t, common.FromHex("02"), k)
+	k, _ = c.Seek(common.FromHex("02"))
+}
