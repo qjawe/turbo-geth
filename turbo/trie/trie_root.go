@@ -212,7 +212,6 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 
 		CompressNibbles(ih.FirstNotCoveredPrefix(), &l.accSeek)
 		if len(ih.PrevKey()) > 0 && len(l.accSeek) == 0 {
-			panic(2)
 			break
 		}
 
@@ -252,7 +251,6 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 
 				CompressNibbles(ihStorage.FirstNotCoveredPrefix(), &l.storageSeek)
 				if len(ihStorage.PrevKey()) > 0 && len(l.storageSeek) == 0 {
-					panic(1)
 					break
 				}
 				for kS, kHexS, vS, err3 := storages.Seek(l.storageSeek); kS != nil; kS, kHexS, vS, err3 = storages.Next() {
@@ -260,7 +258,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 						return EmptyRoot, err3
 					}
 
-					if !bytes.HasPrefix(kS, l.accAddrHashWithInc[:]) || keyIsBefore(ihKS, kHexS) { // read all accounts until next IH
+					if keyIsBefore(ihKS, kHexS) || !bytes.HasPrefix(kS, l.accAddrHashWithInc[:]) { // read until next IH
 						break
 					}
 
@@ -349,7 +347,7 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 	hash []byte,
 	cutoff int,
 ) error {
-	//fmt.Printf("1: %d, %x, %x, %x, %x\n", itemType, accountKey, storageKey, hash, storageValue)
+	fmt.Printf("1: %d, %x, %x, %x, %x\n", itemType, accountKey, storageKey, hash, storageValue)
 	switch itemType {
 	case StorageStreamItem:
 		r.advanceKeysStorage(storageKey, true /* terminator */)
