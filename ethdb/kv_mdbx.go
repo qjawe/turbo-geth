@@ -37,7 +37,7 @@ type MdbxOpts struct {
 func NewMDBX() MdbxOpts {
 	return MdbxOpts{
 		bucketsCfg: DefaultBucketConfigs,
-		flags:      mdbx.NoReadahead | mdbx.Coalesce | mdbx.Durable, // | mdbx.LifoReclaim,
+		flags:      mdbx.NoReadahead | mdbx.Coalesce | mdbx.WriteMap | mdbx.SafeNoSync | mdbx.LifoReclaim,
 	}
 }
 
@@ -551,6 +551,51 @@ func (tx *MdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 			return err
 		}
 		dbi = dbutils.DBI(nativeDBI)
+	}
+	logEvery := time.NewTicker(30 * time.Second)
+	defer logEvery.Stop()
+	for {
+		s, err := tx.BucketStat(name)
+		if err != nil {
+			return err
+		}
+		if s.Entries < 100_000 {
+			break
+		}
+		c := tx.Cursor(name)
+		i := 0
+		var k []byte
+		for k, _, err = c.First(); k != nil; k, _, err = c.First() {
+			if err != nil {
+				return err
+			}
+			err = c.DeleteCurrent()
+			if err != nil {
+				return err
+			}
+			i++
+			if i > 100_000 {
+				break
+			}
+
+			select {
+			default:
+			case <-logEvery.C:
+				log.Info("dropping bucket", "name", name, "current key", fmt.Sprintf("%x", k))
+			}
+		}
+
+		c.Close()
+		_, err = tx.tx.Commit()
+		if err != nil {
+			return err
+		}
+		txn, err := tx.db.env.BeginTxn(nil, mdbx.TxRW)
+		if err != nil {
+			return err
+		}
+		txn.RawRead = true
+		tx.tx = txn
 	}
 
 	if err := tx.tx.Drop(mdbx.DBI(dbi), true); err != nil {
@@ -1521,7 +1566,7 @@ func (c *MdbxDupSortCursor) Append(k []byte, v []byte) error {
 	}
 
 	if err := c.c.Put(k, v, mdbx.Append|mdbx.AppendDup); err != nil {
-		return fmt.Errorf("in Append: %w", err)
+		return fmt.Errorf("append, bucket: %s, %w", c.bucketName, err)
 	}
 	return nil
 }

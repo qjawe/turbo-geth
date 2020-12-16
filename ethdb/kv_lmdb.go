@@ -45,7 +45,7 @@ type LmdbOpts struct {
 func NewLMDB() LmdbOpts {
 	return LmdbOpts{
 		bucketsCfg: DefaultBucketConfigs,
-		flags:      lmdb.NoReadahead | lmdb.NoSync, // do call .Sync manually after commit to measure speed of commit and speed of fsync individually
+		flags:      lmdb.NoReadahead | lmdb.NoSync | lmdb.WriteMap, // do call .Sync manually after commit to measure speed of commit and speed of fsync individually
 	}
 }
 
@@ -601,7 +601,7 @@ func (tx *lmdbTx) Commit(ctx context.Context) error {
 
 	if !tx.isSubTx && tx.db.opts.flags&lmdb.Readonly == 0 && !tx.db.opts.inMem { // call fsync only after main transaction commit
 		fsyncTimer := time.Now()
-		if err := tx.db.env.Sync(tx.flags&NoSync == 0); err != nil {
+		if err := tx.db.env.Sync(false); err != nil {
 			log.Warn("fsync after commit failed", "err", err)
 		}
 		fsyncTook := time.Since(fsyncTimer)
@@ -1545,7 +1545,7 @@ func (c *LmdbDupSortCursor) Append(k []byte, v []byte) error {
 	}
 
 	if err := c.c.Put(k, v, lmdb.Append|lmdb.AppendDup); err != nil {
-		return fmt.Errorf("in Append: %w", err)
+		return fmt.Errorf("append, bucket: %s, %w", c.bucketName, err)
 	}
 	return nil
 }
