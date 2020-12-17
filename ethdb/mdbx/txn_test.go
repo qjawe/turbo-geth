@@ -335,7 +335,7 @@ func TestTxn_Del_dup2(t *testing.T) {
 		panic(err)
 	}
 	defer txn.Abort()
-	err = txn.Put(db, []byte("k"), []byte("v"), 0)
+	err = txn.Put(db, []byte("k"), []byte("v2"), 0)
 	if err != nil {
 		panic(err) // panics with: mdbx_put: MDBX_BAD_DBI: The specified DBI-handle is invalid or changed by another thread/transaction
 	}
