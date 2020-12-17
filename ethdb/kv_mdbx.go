@@ -496,6 +496,8 @@ func (tx *MdbxTx) CreateBucket(name string) error {
 		return err
 	}
 	if err == nil {
+		fmt.Printf("open by accede: %s,%d\n", name, int(dbi))
+
 		cnfCopy.DBI = dbutils.DBI(dbi)
 		var flags uint
 		flags, err = tx.tx.Flags(dbi)
@@ -532,6 +534,7 @@ func (tx *MdbxTx) CreateBucket(name string) error {
 	if err != nil {
 		return err
 	}
+	fmt.Printf("create: %s,%d\n", name, int(dbi))
 	cnfCopy.DBI = dbutils.DBI(dbi)
 
 	tx.db.buckets[name] = cnfCopy
@@ -552,7 +555,7 @@ func (tx *MdbxTx) dropEvenIfBucketIsNotDeprecated(name string) error {
 		}
 		dbi = dbutils.DBI(nativeDBI)
 	}
-
+	fmt.Printf("drop: %d\n", dbi)
 	if err := tx.tx.Drop(mdbx.DBI(dbi), true); err != nil {
 		return err
 	}

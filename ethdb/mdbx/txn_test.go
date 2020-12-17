@@ -276,6 +276,75 @@ func TestTxn_Del_dup(t *testing.T) {
 	}
 }
 
+func TestTxn_Del_dup2(t *testing.T) {
+	runtime.LockOSThread()
+	defer runtime.UnlockOSThread()
+
+	env := setup(t)
+	defer clean(env, t)
+
+	var db DBI
+	txn, err := env.BeginTxn(nil, 0)
+	if err != nil {
+		panic(err)
+	}
+	defer txn.Abort()
+	db, err = txn.OpenDBISimple("text", Create|DupSort)
+	if err != nil {
+		panic(err)
+	}
+	_, err = txn.Commit()
+	if err != nil {
+		panic(err)
+	}
+
+	txn, err = env.BeginTxn(nil, 0)
+	if err != nil {
+		panic(err)
+	}
+	defer txn.Abort()
+	err = txn.Put(db, []byte("k"), []byte("v"), 0)
+	if err != nil {
+		panic(err)
+	}
+	_, err = txn.Commit()
+	if err != nil {
+		panic(err)
+	}
+
+	txn, err = env.BeginTxn(nil, 0)
+	if err != nil {
+		panic(err)
+	}
+	defer txn.Abort()
+	fmt.Printf("%d\n", db) // prints 2
+	err = txn.Drop(db, true)
+	if err != nil {
+		panic(err)
+	}
+	db, err = txn.OpenDBISimple("text", Create|DupSort)
+	fmt.Printf("%d\n", db) // prints 2
+	if err != nil {
+		panic(err)
+	}
+	txn.Abort()
+	fmt.Printf("%d\n", db) // prints 2
+
+	txn, err = env.BeginTxn(nil, 0)
+	if err != nil {
+		panic(err)
+	}
+	defer txn.Abort()
+	err = txn.Put(db, []byte("k"), []byte("v"), 0)
+	if err != nil {
+		panic(err) // panics with: mdbx_put: MDBX_BAD_DBI: The specified DBI-handle is invalid or changed by another thread/transaction
+	}
+	_, err = txn.Commit()
+	if err != nil {
+		panic(err)
+	}
+}
+
 func TestTexn_Put_emptyValue(t *testing.T) {
 	env := setup(t)
 	defer clean(env, t)
