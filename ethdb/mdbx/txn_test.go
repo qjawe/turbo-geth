@@ -276,7 +276,7 @@ func TestTxn_Del_dup(t *testing.T) {
 	}
 }
 
-func TestTxn_Del_dup2(t *testing.T) {
+func TestRollbackOfDrop(t *testing.T) {
 	runtime.LockOSThread()
 	defer runtime.UnlockOSThread()
 
