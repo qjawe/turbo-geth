@@ -294,6 +294,7 @@ func TestRollbackOfDrop(t *testing.T) {
 		if err != nil {
 			panic(err)
 		}
+		fmt.Printf("%d\n", db) // prints 2
 		_, err = txn.Commit()
 		if err != nil {
 			panic(err)
@@ -340,6 +341,7 @@ func TestRollbackOfDrop(t *testing.T) {
 			panic(err)
 		}
 		defer txn.Abort()
+		fmt.Printf("%d\n", db) // prints 2
 		err = txn.Put(db, []byte("k"), []byte("v2"), 0)
 		if err != nil {
 			panic(err) // panics with: mdbx_put: MDBX_BAD_DBI: The specified DBI-handle is invalid or changed by another thread/transaction

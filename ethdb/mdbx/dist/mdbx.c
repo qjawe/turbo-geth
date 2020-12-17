@@ -12,7 +12,7 @@
  * <http://www.OpenLDAP.org/license.html>. */
 
 #define MDBX_ALLOY 1
-#define MDBX_BUILD_SOURCERY 450646b6e8bbfe88557763c05ea1e0aea7b86c6466418587a8fbe5eec8c3c08b_v0_9_2_16_g735da5fe
+#define MDBX_BUILD_SOURCERY 626ae81a4ea9d144c83128a20ec5cfba6e8df1cdeffcaee8afc1d7178634079e_v0_9_2_17_gd77af0bc
 #ifdef MDBX_CONFIG_H
 #include MDBX_CONFIG_H
 #endif
@@ -15721,6 +15721,9 @@ int mdbx_cursor_put(MDBX_cursor *mc, const MDBX_val *key, MDBX_val *data,
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  if (unlikely(TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi)))
+    return MDBX_BAD_DBI;
+
   mdbx_cassert(mc, cursor_is_tracked(mc));
   env = mc->mc_txn->mt_env;
 
@@ -16520,6 +16523,9 @@ int mdbx_cursor_del(MDBX_cursor *mc, MDBX_put_flags_t flags) {
   if (unlikely(rc != MDBX_SUCCESS))
     return rc;
 
+  if (unlikely(TXN_DBI_CHANGED(mc->mc_txn, mc->mc_dbi)))
+    return MDBX_BAD_DBI;
+
   if (unlikely(!(mc->mc_flags & C_INITIALIZED)))
     return MDBX_ENODATA;
 
@@ -17156,6 +17162,9 @@ static __inline int mdbx_couple_init(MDBX_cursor_couple *couple,
 /* Initialize a cursor for a given transaction and database. */
 static int mdbx_cursor_init(MDBX_cursor *mc, MDBX_txn *txn, MDBX_dbi dbi) {
   STATIC_ASSERT(offsetof(MDBX_cursor_couple, outer) == 0);
+  if (unlikely(TXN_DBI_CHANGED(txn, dbi)))
+    return MDBX_BAD_DBI;
+
   return mdbx_couple_init(container_of(mc, MDBX_cursor_couple, outer), dbi, txn,
                           &txn->mt_dbs[dbi], &txn->mt_dbxs[dbi],
                           &txn->mt_dbistate[dbi]);
@@ -25442,9 +25451,9 @@ __dll_export
         0,
         9,
         2,
-        16,
-        {"2020-12-17T01:57:06+03:00", "4d11b62639cbf5a3148e9a83328cb4bf5a93d535", "735da5fedde4a04d6a3765d923c250a2720d8d2d",
-         "v0.9.2-16-g735da5fe"},
+        17,
+        {"2020-12-17T10:36:05+03:00", "74028b23e178a67e9b82a80e0d546bd658f9e100", "d77af0bc1f24c2e32cdd43f4f44ff624c56e5f4e",
+         "v0.9.2-17-gd77af0bc"},
         sourcery};
 
 __dll_export
