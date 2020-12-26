@@ -262,11 +262,6 @@ func getExtractFunc(db ethdb.Getter, cache *shards.StateCache, changeSetBucket s
 			}
 			cache.TurnWritesToReads(cache.PrepareWrites())
 		}
-		if len(value) == 0 {
-			fmt.Printf("del in hs3: %x\n", newK)
-		} else {
-			fmt.Printf("del wr in hs3: %x\n", newK)
-		}
 		return next(dbKey, newK, value)
 	}
 }
@@ -328,10 +323,8 @@ func getUnwindExtractAccounts(db ethdb.Getter, changeSetBucket string) etl.Extra
 		}
 
 		if len(v) == 0 {
-			fmt.Printf("del in hs2: %x\n", newK)
 			return next(dbKey, newK, v)
 		}
-		fmt.Printf("del wr in hs2: %x\n", newK)
 
 		var acc accounts.Account
 		if err = acc.DecodeForStorage(v); err != nil {
@@ -451,7 +444,6 @@ func (p *Promoter) Unwind(logPrefix string, s *StageState, u *UnwindState, stora
 				recoverCodeHashPlain(&acc, p.db, key)
 				p.cache.SetAccountWrite([]byte(key), &acc)
 			} else {
-				fmt.Printf("del in hs: %x\n", []byte(key))
 				p.cache.SetAccountDelete([]byte(key))
 			}
 		}
