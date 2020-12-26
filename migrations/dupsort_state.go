@@ -94,10 +94,10 @@ var dupSortIH = Migration{
 			dbutils.IntermediateHashOfAccountBucket); err != nil {
 			return err
 		}
-		if err := stages.SaveStageProgress(db, stages.IntermediateHashes, 0, nil); err != nil {
+		if err := stages.SaveStageProgress(db, stages.IntermediateHashes, 0); err != nil {
 			return err
 		}
-		if err := stages.SaveStageUnwind(db, stages.IntermediateHashes, 0, nil); err != nil {
+		if err := stages.SaveStageUnwind(db, stages.IntermediateHashes, 0); err != nil {
 			return err
 		}
 		return OnLoadCommit(db, nil, true)
