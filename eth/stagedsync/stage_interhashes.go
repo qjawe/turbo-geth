@@ -33,7 +33,7 @@ func SpawnIntermediateHashesStage(s *StageState, db ethdb.Database, checkRoot bo
 		s.Done()
 		return nil
 	}
-
+	fmt.Printf("%d->%d\n", s.BlockNumber, to)
 	var tx ethdb.DbWithPendingMutations
 	var useExternalTx bool
 	if hasTx, ok := db.(ethdb.HasTx); ok && hasTx.Tx() != nil {
@@ -436,6 +436,7 @@ func UnwindIntermediateHashesStage(u *UnwindState, s *StageState, db ethdb.Datab
 	}
 	syncHeadHeader := rawdb.ReadHeader(db, hash, u.UnwindPoint)
 	expectedRootHash := syncHeadHeader.Root
+	fmt.Printf("u: %d->%d\n", s.BlockNumber, u.UnwindPoint)
 
 	var tx ethdb.DbWithPendingMutations
 	var useExternalTx bool

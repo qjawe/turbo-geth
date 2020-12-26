@@ -261,8 +261,8 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 			}
 			copy(l.accAddrHashWithInc[:], k)
 			binary.BigEndian.PutUint64(l.accAddrHashWithInc[32:], l.accountValue.Incarnation)
-
-			for ihKS, ihVS, err2 := ihStorage.SeekToAccount(l.accAddrHashWithInc[:]); ; ihKS, ihVS, err2 = ihStorage.Next() {
+			accWithInc := l.accAddrHashWithInc[:]
+			for ihKS, ihVS, err2 := ihStorage.SeekToAccount(accWithInc); ; ihKS, ihVS, err2 = ihStorage.Next() {
 				if err2 != nil {
 					return EmptyRoot, err2
 				}
@@ -285,7 +285,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 					if keyIsBefore(ihKS, l.kHexS) { // read until next IH
 						break
 					}
-					if err = l.receiver.Receive(StorageStreamItem, l.accAddrHashWithInc[:], l.kHexS, nil, vS[32:], nil, 0); err != nil {
+					if err = l.receiver.Receive(StorageStreamItem, accWithInc, l.kHexS, nil, vS[32:], nil, 0); err != nil {
 						return EmptyRoot, err
 					}
 				}
@@ -295,7 +295,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 					break
 				}
 
-				if err = l.receiver.Receive(SHashStreamItem, l.accAddrHashWithInc[:], ihKS, nil, nil, ihVS, 0); err != nil {
+				if err = l.receiver.Receive(SHashStreamItem, accWithInc, ihKS, nil, nil, ihVS, 0); err != nil {
 					return EmptyRoot, err
 				}
 			}
