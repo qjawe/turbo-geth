@@ -247,10 +247,10 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 				return EmptyRoot, err
 			}
 
+			fmt.Printf("del acccccc: %x\n", k)
 			if keyIsBefore(ihK, kHex) { // read all accounts until next IH
 				break
 			}
-
 			if err = l.accountValue.DecodeForStorage(v); err != nil {
 				return EmptyRoot, fmt.Errorf("fail DecodeForStorage: %w", err)
 			}
@@ -343,6 +343,11 @@ func (l *FlatDBTrieLoader) prep(accs *StateCursor, cache *shards.StateCache, qui
 	}); err != nil {
 		return err
 	}
+	//ethdb.Walk(accs.c, nil, 0, func(k, v []byte) (bool, error) {
+	//	fmt.Printf("del after!: %x\n", k)
+	//	return true, nil
+	//})
+
 	if err := cache.AccountHashes(func(ihK []byte, _ common.Hash) error {
 		if isDenseSequence(prevIHK, ihK) {
 			return nil
@@ -360,6 +365,9 @@ func (l *FlatDBTrieLoader) prep(accs *StateCursor, cache *shards.StateCache, qui
 			if err != nil {
 				return err
 			}
+			if bytes.HasPrefix(k, common.FromHex("855a")) {
+				fmt.Printf("del suck: %x\n", k)
+			}
 			if keyIsBefore(ihK, kHex) { // read all accounts until next IH
 				break
 			}
@@ -373,6 +381,15 @@ func (l *FlatDBTrieLoader) prep(accs *StateCursor, cache *shards.StateCache, qui
 	}); err != nil {
 		return err
 	}
+	if err := cache.WalkAccounts(nil, func(k common.Hash, account *accounts.Account) (bool, error) {
+		if bytes.HasPrefix(k.Bytes(), common.FromHex("855a")) {
+			fmt.Printf("del after: %x\n", k.Bytes())
+		}
+		return true, nil
+	}); err != nil {
+		return err
+	}
+
 	cache.TurnWritesToReads(cache.PrepareWrites())
 	ihKSBuf := make([]byte, 256)
 	if err := cache.WalkStorageHashes(func(addrHash common.Hash, incarnation uint64, locHashPrefix []byte, hash common.Hash) error {
@@ -419,7 +436,7 @@ func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, cache *shards.Stat
 				return false, err
 			}
 			i2++
-			//fmt.Printf("acc: %x\n", addrHash)
+			fmt.Printf("del acccccc: %x\n", addrHash.Bytes())
 			hexutil.DecompressNibbles(addrHash.Bytes(), &l.kHex)
 			if keyIsBefore(ihK, l.kHex) { // read all accounts until next IH
 				return false, nil
@@ -604,8 +621,8 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 ) error {
 	switch itemType {
 	case StorageStreamItem:
-		//hexutil.DecompressNibbles(accountKey, &r.buf)
-		//fmt.Printf("1: %d, %x, %x, %x\n", itemType, []byte{}, append(r.buf, storageKey...), hash)
+		hexutil.DecompressNibbles(accountKey, &r.buf)
+		fmt.Printf("1: %d, %x, %x, %x\n", itemType, []byte{}, append(r.buf, storageKey...), hash)
 		if len(r.currAccK) == 0 {
 			r.currAccK = append(r.currAccK[:0], accountKey...)
 		}
@@ -617,8 +634,8 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 		}
 		r.saveValueStorage(false, storageValue, hash)
 	case SHashStreamItem:
-		//hexutil.DecompressNibbles(accountKey, &r.buf)
-		//fmt.Printf("1: %d, %x, %x, %x\n", itemType, []byte{}, append(r.buf, storageKey...), hash)
+		hexutil.DecompressNibbles(accountKey, &r.buf)
+		fmt.Printf("1: %d, %x, %x, %x\n", itemType, []byte{}, append(r.buf, storageKey...), hash)
 		if len(storageKey) == 80 { // this is ready-to-use storage root - no reason to call GenStructStep, also GenStructStep doesn't support empty prefixes
 			r.hb.hashStack = append(append(r.hb.hashStack, byte(80+common.HashLength)), hash...)
 			r.hb.nodeStack = append(r.hb.nodeStack, nil)
@@ -636,7 +653,7 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 		}
 		r.saveValueStorage(true, storageValue, hash)
 	case AccountStreamItem:
-		//fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
+		fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
 		r.advanceKeysAccount(accountKey, true /* terminator */)
 		if r.curr.Len() > 0 && !r.wasIH {
 			r.cutoffKeysStorage(0)
@@ -661,7 +678,7 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 			return err
 		}
 	case AHashStreamItem:
-		//fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
+		fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
 		r.advanceKeysAccount(accountKey, false /* terminator */)
 		if r.curr.Len() > 0 && !r.wasIH {
 			r.cutoffKeysStorage(0)
@@ -686,7 +703,7 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 			return err
 		}
 	case CutoffStreamItem:
-		//fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
+		fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
 		if r.trace {
 			fmt.Printf("storage cuttoff %d\n", cutoff)
 		}

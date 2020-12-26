@@ -114,6 +114,7 @@ func executeBlockWithGo(block *types.Block, tx ethdb.DbWithPendingMutations, cac
 }
 
 func SpawnExecuteBlocksStage(s *StageState, stateDB ethdb.Database, chainConfig *params.ChainConfig, chainContext *core.TinyChainContext, vmConfig *vm.Config, quit <-chan struct{}, params ExecuteBlockStageParams) error {
+	params.Cache = nil
 	prevStageProgress, errStart := stages.GetStageProgress(stateDB, stages.Senders)
 	if errStart != nil {
 		return errStart
@@ -357,6 +358,7 @@ func logProgress(logPrefix string, prevBlock uint64, prevTime time.Time, current
 }
 
 func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database, params ExecuteBlockStageParams) error {
+	params.Cache = nil
 	if u.UnwindPoint >= s.BlockNumber {
 		s.Done()
 		return nil

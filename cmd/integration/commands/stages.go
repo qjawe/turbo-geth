@@ -481,7 +481,7 @@ func stageHashState(db ethdb.Database, ctx context.Context) error {
 		u := &stagedsync.UnwindState{Stage: stages.HashState, UnwindPoint: stage6.BlockNumber - unwind}
 		return stagedsync.UnwindHashStateStage(u, stage6, db, cache, tmpdir, ch)
 	}
-	return stagedsync.SpawnHashStateStage(stage6, db, tmpdir, ch)
+	return stagedsync.SpawnHashStateStage(stage6, db, cache, tmpdir, ch)
 }
 
 func stageLogIndex(db ethdb.Database, ctx context.Context) error {

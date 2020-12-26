@@ -17,7 +17,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/turbo/shards"
 )
 
-func SpawnHashStateStage(s *StageState, db ethdb.Database, tmpdir string, quit <-chan struct{}) error {
+func SpawnHashStateStage(s *StageState, db ethdb.Database, cache *shards.StateCache, tmpdir string, quit <-chan struct{}) error {
 	logPrefix := s.state.LogPrefix()
 	to, err := s.ExecutionAt(db)
 	if err != nil {
@@ -40,7 +40,7 @@ func SpawnHashStateStage(s *StageState, db ethdb.Database, tmpdir string, quit <
 			return fmt.Errorf("[%s] %w", logPrefix, err)
 		}
 	} else {
-		if err := promoteHashedStateIncrementally(logPrefix, s, s.BlockNumber, to, db, tmpdir, quit); err != nil {
+		if err := promoteHashedStateIncrementally(logPrefix, s, s.BlockNumber, to, db, cache, tmpdir, quit); err != nil {
 			return fmt.Errorf("[%s] %w", logPrefix, err)
 		}
 	}
@@ -231,7 +231,7 @@ type Promoter struct {
 	quitCh           chan struct{}
 }
 
-func getExtractFunc(db ethdb.Getter, changeSetBucket string) etl.ExtractFunc {
+func getExtractFunc(db ethdb.Getter, cache *shards.StateCache, changeSetBucket string) etl.ExtractFunc {
 	decode := changeset.Mapper[changeSetBucket].Decode
 	return func(dbKey, dbValue []byte, next etl.ExtractNextFunc) error {
 		_, k, _ := decode(dbKey, dbValue)
@@ -243,6 +243,29 @@ func getExtractFunc(db ethdb.Getter, changeSetBucket string) etl.ExtractFunc {
 		newK, err := transformPlainStateKey(k)
 		if err != nil {
 			return err
+		}
+		if cache != nil {
+			if len(k) == 20 {
+				if len(value) == 0 {
+					cache.SetAccountDelete(k)
+				} else {
+					acc := &accounts.Account{}
+					_ = acc.DecodeForStorage(value)
+					cache.SetAccountWrite(k, acc)
+				}
+			} else {
+				if len(value) == 0 {
+					cache.SetStorageDelete(k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:])
+				} else {
+					cache.SetStorageWrite(k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:], value)
+				}
+			}
+			cache.TurnWritesToReads(cache.PrepareWrites())
+		}
+		if len(value) == 0 {
+			fmt.Printf("del in hs3: %x\n", newK)
+		} else {
+			fmt.Printf("del wr in hs3: %x\n", newK)
 		}
 		return next(dbKey, newK, value)
 	}
@@ -305,8 +328,10 @@ func getUnwindExtractAccounts(db ethdb.Getter, changeSetBucket string) etl.Extra
 		}
 
 		if len(v) == 0 {
+			fmt.Printf("del in hs2: %x\n", newK)
 			return next(dbKey, newK, v)
 		}
+		fmt.Printf("del wr in hs2: %x\n", newK)
 
 		var acc accounts.Account
 		if err = acc.DecodeForStorage(v); err != nil {
@@ -382,7 +407,7 @@ func (p *Promoter) Promote(logPrefix string, s *StageState, from, to uint64, sto
 		} else {
 			loadBucket = dbutils.HashedAccountsBucket
 		}
-		extract = getExtractFunc(p.db, changeSetBucket)
+		extract = getExtractFunc(p.db, p.cache, changeSetBucket)
 	}
 
 	return etl.Transform(
@@ -426,6 +451,7 @@ func (p *Promoter) Unwind(logPrefix string, s *StageState, u *UnwindState, stora
 				recoverCodeHashPlain(&acc, p.db, key)
 				p.cache.SetAccountWrite([]byte(key), &acc)
 			} else {
+				fmt.Printf("del in hs: %x\n", []byte(key))
 				p.cache.SetAccountDelete([]byte(key))
 			}
 		}
@@ -438,6 +464,7 @@ func (p *Promoter) Unwind(logPrefix string, s *StageState, u *UnwindState, stora
 				p.cache.SetStorageDelete(k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:])
 			}
 		}
+		p.cache.TurnWritesToReads(p.cache.PrepareWrites())
 	}
 
 	startkey := dbutils.EncodeBlockNumber(to + 1)
@@ -482,8 +509,8 @@ func (p *Promoter) Unwind(logPrefix string, s *StageState, u *UnwindState, stora
 	)
 }
 
-func promoteHashedStateIncrementally(logPrefix string, s *StageState, from, to uint64, db ethdb.Database, tmpdir string, quit <-chan struct{}) error {
-	prom := NewPromoter(db, nil, quit)
+func promoteHashedStateIncrementally(logPrefix string, s *StageState, from, to uint64, db ethdb.Database, cache *shards.StateCache, tmpdir string, quit <-chan struct{}) error {
+	prom := NewPromoter(db, cache, quit)
 	prom.TempDir = tmpdir
 	if err := prom.Promote(logPrefix, s, from, to, false /* storage */, true /* codes */); err != nil {
 		return err
