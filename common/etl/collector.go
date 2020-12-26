@@ -240,14 +240,15 @@ func loadFilesIntoBucket(logPrefix string, db ethdb.Database, bucket string, pro
 			return err
 		}
 
-		element := (heap.Pop(h)).(HeapElem)
+		el := heap.Pop(h)
+		element := el.(HeapElem)
 		provider := providers[element.TimeIdx]
 		err := loadFunc(element.Key, element.Value, currentTable, loadNextFunc)
 		if err != nil {
 			return err
 		}
 		if element.Key, element.Value, err = provider.Next(decoder); err == nil {
-			heap.Push(h, element)
+			heap.Push(h, el)
 		} else if err != io.EOF {
 			return fmt.Errorf("%s: error while reading next element from disk: %v", logPrefix, err)
 		}
