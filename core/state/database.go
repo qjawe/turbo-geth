@@ -851,7 +851,7 @@ func (tds *TrieDbState) UnwindTo(blockNr uint64) error {
 	tds.StartNewBuffer()
 	b := tds.currentBuffer
 
-	accountMap, storageMap, err := changeset.RewindData(tds.db, tds.blockNr, blockNr)
+	accountMap, storageMap, err := changeset.RewindDataHashed(tds.db, tds.blockNr, blockNr)
 	if err != nil {
 		return err
 	}

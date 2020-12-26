@@ -324,7 +324,6 @@ func getUnwindExtractAccounts(db ethdb.Getter, changeSetBucket string) etl.Extra
 
 		value := make([]byte, acc.EncodingLengthForStorage())
 		acc.EncodeForStorage(value)
-
 		return next(dbKey, newK, value)
 	}
 }
@@ -413,6 +412,33 @@ func (p *Promoter) Unwind(logPrefix string, s *StageState, u *UnwindState, stora
 	to := u.UnwindPoint
 
 	log.Info(fmt.Sprintf("[%s] Unwinding started", logPrefix), "from", from, "to", to, "storage", storage, "codes", codes)
+	if p.cache != nil {
+		accountMap, storageMap, errRewind := changeset.RewindData(p.db, s.BlockNumber, u.UnwindPoint)
+		if errRewind != nil {
+			return fmt.Errorf("%s: getting rewind data: %v", logPrefix, errRewind)
+		}
+		for key, value := range accountMap {
+			if len(value) > 0 {
+				var acc accounts.Account
+				if err := acc.DecodeForStorage(value); err != nil {
+					return err
+				}
+				recoverCodeHashPlain(&acc, p.db, key)
+				p.cache.SetAccountWrite([]byte(key), &acc)
+			} else {
+				p.cache.SetAccountDelete([]byte(key))
+			}
+		}
+
+		for key, value := range storageMap {
+			k := []byte(key)
+			if len(value) > 0 {
+				p.cache.SetStorageWrite(k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:], value)
+			} else {
+				p.cache.SetStorageDelete(k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:])
+			}
+		}
+	}
 
 	startkey := dbutils.EncodeBlockNumber(to + 1)
 
@@ -441,40 +467,7 @@ func (p *Promoter) Unwind(logPrefix string, s *StageState, u *UnwindState, stora
 		loadBucket,
 		p.TempDir,
 		extractFunc,
-		func(k []byte, value []byte, table etl.CurrentTableReader, next etl.LoadNextFunc) error {
-			if p.cache == nil {
-				return l.LoadFunc(k, value, table, next)
-			}
-			return l.LoadFunc(k, value, table, func(originalK, k, v []byte) error {
-				if bytes.Equal(common.FromHex("04fd958017be3b5f9b4c7169039e7990b35e6ebe1023d768c693be7b5be17950"), k) {
-					fmt.Printf("%x,%x\n", k, v)
-					panic(1)
-				}
-
-				if storage {
-					if len(v) == 0 {
-						p.cache.DeprecatedSetStorageDelete(common.BytesToHash(k[:32]), binary.BigEndian.Uint64(k[32:40]), common.BytesToHash(k[40:]))
-					} else {
-						p.cache.DeprecatedSetStorageWrite(common.BytesToHash(k[:32]), binary.BigEndian.Uint64(k[32:40]), common.BytesToHash(k[40:]), v)
-					}
-					return next(originalK, k, v)
-				}
-				if codes {
-					return next(originalK, k, v)
-				}
-
-				if len(v) == 0 {
-					p.cache.DeprecatedSetAccountDelete(common.BytesToHash(k))
-				} else {
-					a := &accounts.Account{}
-					if err := a.DecodeForStorage(v); err != nil {
-						return err
-					}
-					p.cache.DeprecatedSetAccountWrite(common.BytesToHash(k), a)
-				}
-				return next(originalK, k, v)
-			})
-		},
+		l.LoadFunc,
 		etl.TransformArgs{
 			BufferType:      etl.SortableOldestAppearedBuffer,
 			ExtractStartKey: startkey,

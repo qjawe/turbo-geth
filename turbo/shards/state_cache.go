@@ -658,9 +658,6 @@ func (sc *StateCache) SetAccountWrite(address []byte, account *accounts.Account)
 	var awi AccountWriteItem
 	copy(awi.address[:], address)
 	awi.ai = &ai
-	if bytes.Equal(common.FromHex("04fd958017be3b5f9b4c7169039e7990b35e6ebe1023d768c693be7b5be17950"), ai.addrHash.Bytes()) {
-		panic(2)
-	}
 	sc.setWrite(&ai, &awi, false /* delete */)
 }
 

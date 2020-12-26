@@ -381,7 +381,7 @@ func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database,
 	stateBucket := dbutils.PlainStateBucket
 	storageKeyLength := common.AddressLength + common.IncarnationLength + common.HashLength
 
-	accountMap, storageMap, errRewind := changeset.RewindDataPlain(tx, s.BlockNumber, u.UnwindPoint)
+	accountMap, storageMap, errRewind := changeset.RewindData(tx, s.BlockNumber, u.UnwindPoint)
 	if errRewind != nil {
 		return fmt.Errorf("%s: getting rewind data: %v", logPrefix, errRewind)
 	}
@@ -411,19 +411,20 @@ func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database,
 	}
 
 	for key, value := range storageMap {
+		k := []byte(key)
 		if len(value) > 0 {
-			if err := tx.Put(stateBucket, []byte(key)[:storageKeyLength], value); err != nil {
+			if err := tx.Put(stateBucket, k[:storageKeyLength], value); err != nil {
 				return err
 			}
 			if params.Cache != nil {
-				params.Cache.SetStorageWrite([]byte(key)[:20], binary.BigEndian.Uint64([]byte(key)[20:28]), []byte(key)[28:], value)
+				params.Cache.SetStorageWrite(k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:], value)
 			}
 		} else {
-			if err := tx.Delete(stateBucket, []byte(key)[:storageKeyLength], nil); err != nil {
+			if err := tx.Delete(stateBucket, k[:storageKeyLength], nil); err != nil {
 				return err
 			}
 			if params.Cache != nil {
-				params.Cache.SetStorageDelete([]byte(key)[:20], binary.BigEndian.Uint64([]byte(key)[20:28]), []byte(key)[28:])
+				params.Cache.SetStorageDelete(k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:])
 			}
 		}
 	}
@@ -452,7 +453,7 @@ func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database,
 
 func writeAccountPlain(logPrefix string, db ethdb.Database, key string, acc accounts.Account) error {
 	var address common.Address
-	copy(address[:], []byte(key))
+	copy(address[:], key)
 	if err := cleanupContractCodeBucket(
 		logPrefix,
 		db,
@@ -506,7 +507,7 @@ func cleanupContractCodeBucket(
 
 func recoverCodeHashPlain(acc *accounts.Account, db ethdb.Getter, key string) {
 	var address common.Address
-	copy(address[:], []byte(key))
+	copy(address[:], key)
 	if acc.Incarnation > 0 && acc.IsEmptyCodeHash() {
 		if codeHash, err2 := db.Get(dbutils.PlainContractCodeBucket, dbutils.PlainGenerateStoragePrefix(address[:], acc.Incarnation)); err2 == nil {
 			copy(acc.CodeHash[:], codeHash)
@@ -522,7 +523,7 @@ func deleteAccountHashed(db rawdb.DatabaseDeleter, key string) error {
 
 func deleteAccountPlain(db ethdb.Deleter, key string) error {
 	var address common.Address
-	copy(address[:], []byte(key))
+	copy(address[:], key)
 	return rawdb.PlainDeleteAccount(db, address)
 }
 
