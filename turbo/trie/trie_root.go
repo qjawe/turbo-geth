@@ -661,7 +661,7 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 			return err
 		}
 	case AHashStreamItem:
-		//fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
+		fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
 		r.advanceKeysAccount(accountKey, false /* terminator */)
 		if r.curr.Len() > 0 && !r.wasIH {
 			r.cutoffKeysStorage(0)
