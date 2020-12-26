@@ -37,7 +37,7 @@ func newTestLmdb() *ObjectDatabase {
 	return NewObjectDatabase(NewLMDB().InMem().MustOpen())
 }
 
-var testBucket = dbutils.CurrentStateBucketOld2
+var testBucket = dbutils.HashedAccountsBucket
 var testValues = []string{"a", "1251", "\x00123\x00"}
 
 func TestMemoryDB_PutGet(t *testing.T) {

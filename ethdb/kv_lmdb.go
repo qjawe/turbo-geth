@@ -45,7 +45,7 @@ type LmdbOpts struct {
 func NewLMDB() LmdbOpts {
 	return LmdbOpts{
 		bucketsCfg: DefaultBucketConfigs,
-		flags:      lmdb.NoReadahead | lmdb.NoSync, // do call .Sync manually after commit to measure speed of commit and speed of fsync individually
+		flags:      lmdb.NoReadahead | lmdb.NoSync | lmdb.NoMetaSync, // do call .Sync manually after commit to measure speed of commit and speed of fsync individually
 	}
 }
 
@@ -601,9 +601,9 @@ func (tx *lmdbTx) Commit(ctx context.Context) error {
 
 	if !tx.isSubTx && tx.db.opts.flags&lmdb.Readonly == 0 && !tx.db.opts.inMem { // call fsync only after main transaction commit
 		fsyncTimer := time.Now()
-		if err := tx.db.env.Sync(tx.flags&NoSync == 0); err != nil {
-			log.Warn("fsync after commit failed", "err", err)
-		}
+		//if err := tx.db.env.Sync(tx.flags&NoSync == 0); err != nil {
+		//	log.Warn("fsync after commit failed", "err", err)
+		//}
 		fsyncTook := time.Since(fsyncTimer)
 		if fsyncTook > 20*time.Second {
 			log.Info("Batch", "fsync", fsyncTook)
@@ -1358,14 +1358,6 @@ type LmdbDupSortCursor struct {
 func (c *LmdbDupSortCursor) initCursor() error {
 	if c.c != nil {
 		return nil
-	}
-
-	if c.bucketCfg.AutoDupSortKeysConversion {
-		return fmt.Errorf("class LmdbDupSortCursor not compatible with AutoDupSortKeysConversion buckets")
-	}
-
-	if c.bucketCfg.Flags&lmdb.DupSort == 0 {
-		return fmt.Errorf("class LmdbDupSortCursor can be used only if bucket created with flag lmdb.DupSort")
 	}
 
 	return c.LmdbCursor.initCursor()

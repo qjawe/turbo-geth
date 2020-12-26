@@ -26,6 +26,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/common/changeset"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
+	"github.com/ledgerwatch/turbo-geth/common/hexutil"
 	"github.com/ledgerwatch/turbo-geth/consensus/ethash"
 	"github.com/ledgerwatch/turbo-geth/core"
 	"github.com/ledgerwatch/turbo-geth/core/rawdb"
@@ -316,13 +317,10 @@ func accountSavings(db ethdb.KV) (int, int) {
 	emptyRoots := 0
 	emptyCodes := 0
 	check(db.View(context.Background(), func(tx ethdb.Tx) error {
-		c := tx.Cursor(dbutils.CurrentStateBucketOld2)
+		c := tx.Cursor(dbutils.HashedAccountsBucket)
 		for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 			if err != nil {
 				return err
-			}
-			if len(k) != 32 {
-				continue
 			}
 			if bytes.Contains(v, trie.EmptyRoot.Bytes()) {
 				emptyRoots++
@@ -1015,7 +1013,7 @@ func nextIncarnation(chaindata string, addrHash common.Hash) {
 	startkey := make([]byte, common.HashLength+common.IncarnationLength+common.HashLength)
 	var fixedbits = 8 * common.HashLength
 	copy(startkey, addrHash[:])
-	if err := ethDb.Walk(dbutils.CurrentStateBucketOld2, startkey, fixedbits, func(k, v []byte) (bool, error) {
+	if err := ethDb.Walk(dbutils.HashedStorageBucket, startkey, fixedbits, func(k, v []byte) (bool, error) {
 		copy(incarnationBytes[:], k[common.HashLength:])
 		found = true
 		return false, nil
@@ -1035,18 +1033,15 @@ func repairCurrent() {
 	defer historyDb.Close()
 	currentDb := ethdb.MustOpen("statedb")
 	defer currentDb.Close()
-	check(historyDb.ClearBuckets(dbutils.CurrentStateBucketOld2))
+	check(historyDb.ClearBuckets(dbutils.HashedStorageBucket))
 	check(historyDb.KV().Update(context.Background(), func(tx ethdb.Tx) error {
-		newB := tx.Cursor(dbutils.CurrentStateBucketOld2)
+		newB := tx.Cursor(dbutils.HashedStorageBucket)
 		count := 0
 		if err := currentDb.KV().View(context.Background(), func(ctx ethdb.Tx) error {
-			c := ctx.Cursor(dbutils.CurrentStateBucketOld2)
+			c := ctx.Cursor(dbutils.HashedStorageBucket)
 			for k, v, err := c.First(); k != nil; k, v, err = c.Next() {
 				if err != nil {
 					return err
-				}
-				if len(k) == 32 {
-					continue
 				}
 				check(newB.Put(k, v))
 				count++
@@ -1230,7 +1225,8 @@ func regenerate(chaindata string) error {
 	db := ethdb.MustOpen(chaindata)
 	defer db.Close()
 	check(db.ClearBuckets(
-		dbutils.IntermediateTrieHashBucketOld2,
+		dbutils.IntermediateHashOfAccountBucket,
+		dbutils.IntermediateHashOfStorageBucket,
 	))
 	headHash := rawdb.ReadHeadBlockHash(db)
 	headNumber := rawdb.ReadHeaderNumber(db, headHash)
@@ -1242,7 +1238,7 @@ func regenerate(chaindata string) error {
 			return nil
 		}
 		var k []byte
-		trie.CompressNibbles(keyHex, &k)
+		hexutil.CompressNibbles(keyHex, &k)
 		if hash == nil {
 			return collector.Collect(k, nil)
 		}

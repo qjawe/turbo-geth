@@ -19,7 +19,8 @@ import (
 )
 
 var stateBuckets = []string{
-	dbutils.CurrentStateBucketOld2,
+	dbutils.HashedAccountsBucket,
+	dbutils.HashedStorageBucket,
 	dbutils.AccountChangeSetBucket,
 	dbutils.StorageChangeSetBucket,
 	dbutils.ContractCodeBucket,
@@ -29,7 +30,8 @@ var stateBuckets = []string{
 	dbutils.PlainContractCodeBucket,
 	dbutils.IncarnationMapBucket,
 	dbutils.CodeBucket,
-	dbutils.IntermediateTrieHashBucketOld2,
+	dbutils.IntermediateHashOfAccountBucket,
+	dbutils.IntermediateHashOfStorageBucket,
 	dbutils.AccountsHistoryBucket,
 	dbutils.StorageHistoryBucket,
 	dbutils.TxLookupPrefix,

@@ -147,14 +147,14 @@ func PruneStorageOfSelfDestructedAccounts(db ethdb.Database) error {
 			return true, nil
 		}
 
-		if err := db.Walk(dbutils.CurrentStateBucketOld2, k, common.HashLength*8, func(k, _ []byte) (b bool, e error) {
+		if err := db.Walk(dbutils.HashedStorageBucket, k, common.HashLength*8, func(k, _ []byte) (b bool, e error) {
 			keysToRemove.StorageKeys = append(keysToRemove.StorageKeys, common.CopyBytes(k))
 			return true, nil
 		}); err != nil {
 			return false, err
 		}
 
-		if err := db.Walk(dbutils.IntermediateTrieHashBucketOld2, k, common.HashLength*8, func(k, _ []byte) (b bool, e error) {
+		if err := db.Walk(dbutils.IntermediateHashOfStorageBucket, k, common.HashLength*8, func(k, _ []byte) (b bool, e error) {
 			keysToRemove.IntermediateTrieHashKeys = append(keysToRemove.IntermediateTrieHashKeys, common.CopyBytes(k))
 			return true, nil
 		}); err != nil {
@@ -280,10 +280,11 @@ func LimitIterator(k *keysToRemove, limit int) *limitIterator {
 	i.batches = []Batch{
 		{bucket: dbutils.AccountsHistoryBucket, keys: i.k.AccountHistoryKeys},
 		{bucket: dbutils.StorageHistoryBucket, keys: i.k.StorageHistoryKeys},
-		{bucket: dbutils.CurrentStateBucketOld2, keys: i.k.StorageKeys},
+		{bucket: dbutils.HashedStorageBucket, keys: i.k.StorageKeys},
 		{bucket: dbutils.AccountChangeSetBucket, keys: i.k.AccountChangeSet},
 		{bucket: dbutils.StorageChangeSetBucket, keys: i.k.StorageChangeSet},
-		{bucket: dbutils.IntermediateTrieHashBucketOld2, keys: i.k.IntermediateTrieHashKeys},
+		{bucket: dbutils.IntermediateHashOfAccountBucket, keys: i.k.IntermediateTrieHashKeys},
+		{bucket: dbutils.IntermediateHashOfStorageBucket, keys: i.k.IntermediateTrieHashKeys},
 	}
 
 	return i

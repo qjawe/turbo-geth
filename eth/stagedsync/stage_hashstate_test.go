@@ -49,7 +49,7 @@ func TestPromoteHashedStateClearState(t *testing.T) {
 		t.Errorf("error while committing state: %v", err)
 	}
 
-	compareCurrentState(t, db1, db2, dbutils.CurrentStateBucketOld2, dbutils.ContractCodeBucket)
+	compareCurrentState(t, db1, db2, dbutils.HashedAccountsBucket, dbutils.HashedStorageBucket, dbutils.ContractCodeBucket)
 }
 
 func TestPromoteHashedStateIncremental(t *testing.T) {
@@ -98,7 +98,7 @@ func TestPromoteHashedStateIncremental(t *testing.T) {
 		t.Errorf("error while committing state: %v", err)
 	}
 
-	compareCurrentState(t, db1, db2, dbutils.CurrentStateBucketOld2)
+	compareCurrentState(t, db1, db2, dbutils.HashedAccountsBucket, dbutils.HashedStorageBucket)
 }
 
 func TestPromoteHashedStateIncrementalMixed(t *testing.T) {
@@ -131,7 +131,7 @@ func TestPromoteHashedStateIncrementalMixed(t *testing.T) {
 	if err != nil {
 		t.Errorf("error while committing state: %v", err)
 	}
-	compareCurrentState(t, db1, db2, dbutils.CurrentStateBucketOld2)
+	compareCurrentState(t, db1, db2, dbutils.HashedAccountsBucket, dbutils.HashedStorageBucket)
 }
 
 func TestUnwindHashed(t *testing.T) {
@@ -170,5 +170,5 @@ func TestUnwindHashed(t *testing.T) {
 		t.Errorf("error while committing state: %v", err)
 	}
 
-	compareCurrentState(t, db1, db2, dbutils.CurrentStateBucketOld2)
+	compareCurrentState(t, db1, db2, dbutils.HashedAccountsBucket, dbutils.HashedStorageBucket)
 }

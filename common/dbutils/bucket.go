@@ -343,6 +343,10 @@ var BucketsConfigs = BucketsCfg{
 	StorageChangeSetBucket: {
 		Flags: DupSort,
 	},
+	IntermediateHashOfStorageBucket: {
+		Flags:               DupSort,
+		CustomDupComparator: DupCmpSuffix32,
+	},
 	PlainStateBucket: {
 		Flags:                     DupSort,
 		AutoDupSortKeysConversion: true,

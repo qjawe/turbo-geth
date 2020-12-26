@@ -10,6 +10,7 @@ import (
 
 	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
+	"github.com/ledgerwatch/turbo-geth/common/hexutil"
 	"github.com/ledgerwatch/turbo-geth/core/types/accounts"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
 	"github.com/ledgerwatch/turbo-geth/log"
@@ -845,7 +846,7 @@ func (c *FilterCursor2) _seek(seek []byte) (err error) {
 		return nil
 	}
 
-	DecompressNibbles(c.k, &c.kHex)
+	hexutil.DecompressNibbles(c.k, &c.kHex)
 	if ok, err := c.filter(c.kHex); err != nil {
 		return err
 	} else if ok {
@@ -865,7 +866,7 @@ func (c *FilterCursor2) _next() (err error) {
 			return nil
 		}
 
-		DecompressNibbles(c.k, &c.kHex)
+		hexutil.DecompressNibbles(c.k, &c.kHex)
 		var ok bool
 		ok, err = c.filter(c.kHex)
 		if err != nil {

@@ -9,6 +9,7 @@ import (
 	"time"
 	"unsafe"
 
+	"github.com/c2h5oh/datasize"
 	"github.com/google/btree"
 	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/common/changeset"
@@ -44,8 +45,8 @@ type StateWriterBuilder func(db ethdb.Database, changeSetsDB ethdb.Database, blo
 type ExecuteBlockStageParams struct {
 	ToBlock               uint64 // not setting this params means no limit
 	WriteReceipts         bool
-	CacheSize             int
-	BatchSize             int
+	Cache                 *shards.StateCache
+	BatchSize             datasize.ByteSize
 	ChangeSetHook         ChangeSetHook
 	ReaderBuilder         StateReaderBuilder
 	WriterBuilder         StateWriterBuilder
@@ -146,20 +147,20 @@ func SpawnExecuteBlocksStage(s *StageState, stateDB ethdb.Database, chainConfig 
 	if useSilkworm && params.ChangeSetHook != nil {
 		panic("ChangeSetHook is not supported with Silkworm")
 	}
-	if useSilkworm && params.CacheSize != 0 {
+	if useSilkworm && params.Cache != nil {
 		panic("CacheSize is not supported with Silkworm yet")
 	}
 
 	var cache *shards.StateCache
 	var batch ethdb.DbWithPendingMutations
-	useBatch := !useSilkworm && params.CacheSize == 0
+	useBatch := !useSilkworm && params.Cache == nil
 	if useBatch {
 		batch = tx.NewBatch()
 		defer batch.Rollback()
 	}
-	if !useSilkworm && params.CacheSize > 0 {
+	if !useSilkworm && params.Cache != nil {
 		batch = tx
-		cache = shards.NewStateCache(32, params.CacheSize)
+		cache = params.Cache
 	}
 
 	chainContext.SetDB(tx)
@@ -178,7 +179,7 @@ func SpawnExecuteBlocksStage(s *StageState, stateDB ethdb.Database, chainConfig 
 		if useSilkworm {
 			txn := tx.(ethdb.HasTx).Tx()
 			// Silkworm executes many blocks simultaneously
-			if blockNum, err = silkworm.ExecuteBlocks(params.SilkwormExecutionFunc, txn, chainConfig.ChainID, blockNum, to, params.BatchSize, params.WriteReceipts); err != nil {
+			if blockNum, err = silkworm.ExecuteBlocks(params.SilkwormExecutionFunc, txn, chainConfig.ChainID, blockNum, to, int(params.BatchSize), params.WriteReceipts); err != nil {
 				return err
 			}
 		} else {
@@ -198,7 +199,7 @@ func SpawnExecuteBlocksStage(s *StageState, stateDB ethdb.Database, chainConfig 
 		stageProgress = blockNum
 
 		if cache == nil {
-			updateProgress := !useBatch || batch.BatchSize() >= params.BatchSize
+			updateProgress := !useBatch || batch.BatchSize() >= int(params.BatchSize)
 			if updateProgress {
 				if err = s.Update(tx, stageProgress); err != nil {
 					return err
@@ -216,25 +217,27 @@ func SpawnExecuteBlocksStage(s *StageState, stateDB ethdb.Database, chainConfig 
 				}
 			}
 		} else {
-			if cache.WriteSize() >= params.BatchSize {
+			if cache.WriteSize() >= int(params.BatchSize) {
 				if err = s.Update(tx, blockNum); err != nil {
 					return err
 				}
-				start := time.Now()
+				//start := time.Now()
 				writes := cache.PrepareWrites()
-				log.Info("PrepareWrites", "in", time.Since(start))
+				//log.Info("PrepareWrites", "in", time.Since(start))
+				start := time.Now()
 				if err = commitCache(tx, writes); err != nil {
 					return err
 				}
+				log.Info("CommitCache", "in", time.Since(start))
 				if !useExternalTx {
 					if err = tx.CommitAndBegin(context.Background()); err != nil {
 						return err
 					}
 					chainContext.SetDB(tx)
 				}
-				start = time.Now()
+				//start = time.Now()
 				cache.TurnWritesToReads(writes)
-				log.Info("TurnWritesToReads", "in", time.Since(start))
+				//log.Info("TurnWritesToReads", "in", time.Since(start))
 			}
 		}
 
@@ -279,7 +282,7 @@ func SpawnExecuteBlocksStage(s *StageState, stateDB ethdb.Database, chainConfig 
 	return nil
 }
 
-func commitCache(tx ethdb.DbWithPendingMutations, writes *btree.BTree) error {
+func commitCache(tx ethdb.DbWithPendingMutations, writes [5]*btree.BTree) error {
 	return shards.WalkWrites(writes,
 		func(address []byte, account *accounts.Account) error { // accountWrite
 			//fmt.Printf("account write %x: balance %d, nonce %d\n", address, account.Balance.ToBig(), account.Nonce)
@@ -353,7 +356,7 @@ func logProgress(logPrefix string, prevBlock uint64, prevTime time.Time, current
 	return currentBlock, currentTime
 }
 
-func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database, writeReceipts bool) error {
+func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database, params ExecuteBlockStageParams) error {
 	if u.UnwindPoint >= s.BlockNumber {
 		s.Done()
 		return nil
@@ -394,9 +397,15 @@ func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database,
 			if err := writeAccountPlain(logPrefix, tx, key, acc); err != nil {
 				return err
 			}
+			if params.Cache != nil {
+				params.Cache.SetAccountWrite([]byte(key), &acc)
+			}
 		} else {
 			if err := deleteAccountPlain(tx, key); err != nil {
 				return err
+			}
+			if params.Cache != nil {
+				params.Cache.SetAccountDelete([]byte(key))
 			}
 		}
 	}
@@ -406,9 +415,15 @@ func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database,
 			if err := tx.Put(stateBucket, []byte(key)[:storageKeyLength], value); err != nil {
 				return err
 			}
+			if params.Cache != nil {
+				params.Cache.SetStorageWrite([]byte(key)[:20], binary.BigEndian.Uint64([]byte(key)[20:28]), []byte(key)[28:], value)
+			}
 		} else {
 			if err := tx.Delete(stateBucket, []byte(key)[:storageKeyLength], nil); err != nil {
 				return err
+			}
+			if params.Cache != nil {
+				params.Cache.SetStorageDelete([]byte(key)[:20], binary.BigEndian.Uint64([]byte(key)[20:28]), []byte(key)[28:])
 			}
 		}
 	}
@@ -417,7 +432,7 @@ func UnwindExecutionStage(u *UnwindState, s *StageState, stateDB ethdb.Database,
 		return fmt.Errorf("[%s] %w", logPrefix, err)
 	}
 
-	if writeReceipts {
+	if params.WriteReceipts {
 		if err := rawdb.DeleteNewerReceipts(tx, u.UnwindPoint+1); err != nil {
 			return fmt.Errorf("%s: walking receipts: %v", logPrefix, err)
 		}
