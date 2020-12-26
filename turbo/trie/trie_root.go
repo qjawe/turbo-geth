@@ -276,7 +276,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 				if len(l.storageSeek) == 0 {
 					l.storageSeek = []byte{0}
 				}
-				for kS, vS, err3 := ss.SeekBothRange(l.accAddrHashWithInc[:], l.storageSeek); kS != nil; kS, vS, err3 = ss.NextDup() {
+				for kS, vS, err3 := ss.SeekBothRange(accWithInc, l.storageSeek); kS != nil; kS, vS, err3 = ss.NextDup() {
 					if err3 != nil {
 						return EmptyRoot, err3
 					}
