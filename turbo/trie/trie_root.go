@@ -923,7 +923,8 @@ func (c *IHCursor) First() (k, v []byte, err error) {
 	if k == nil {
 		return nil, nil, nil
 	}
-	c.cur = append(c.cur[:0], k...)
+	c.cur = k
+	//c.cur = append(c.cur[:0], k...)
 	return c.cur, v, nil
 }
 
@@ -934,19 +935,22 @@ func (c *IHCursor) Seek(seek []byte) (k, v []byte, err error) {
 		return []byte{}, nil, err
 	}
 
-	c.prev = append(c.prev[:0], c.cur...)
+	c.prev = c.cur
+	//c.prev = append(c.prev[:0], c.cur...)
 	if k == nil {
 		c.cur = nil
 		return nil, nil, nil
 	}
-	c.cur = append(c.cur[:0], k...)
+	c.cur = k
+	//c.cur = append(c.cur[:0], k...)
 	return c.cur, v, nil
 }
 
 func (c *IHCursor) Next() (k, v []byte, err error) {
 	ok := dbutils.NextNibblesSubtree(c.cur, &c.next)
 	if !ok {
-		c.prev = append(c.prev[:0], c.cur...)
+		c.prev = c.cur
+		//c.prev = append(c.prev[:0], c.cur...)
 		c.cur = nil
 		return nil, nil, nil
 	}
@@ -955,12 +959,15 @@ func (c *IHCursor) Next() (k, v []byte, err error) {
 		return []byte{}, nil, err
 	}
 
-	c.prev = append(c.prev[:0], c.cur...)
+	c.prev = c.cur
+	//c.prev = append(c.prev[:0], c.cur...)
 	if k == nil {
 		c.cur = nil
 		return nil, nil, nil
 	}
-	c.cur = append(c.cur[:0], k...)
+
+	c.cur = k
+	//c.cur = append(c.cur[:0], k...)
 	return c.cur, v, nil
 }
 
