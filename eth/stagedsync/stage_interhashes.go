@@ -117,9 +117,6 @@ func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 				if len(keyHex) == 0 {
 					return nil
 				}
-				if len(keyHex) == 1 {
-					fmt.Printf("pr: %x, %x\n", keyHex, hash)
-				}
 				return accountIHCollector.Collect(keyHex, hash)
 			}
 			storageHashCollector := func(accWithInc []byte, keyHex []byte, hash []byte) error {
@@ -139,7 +136,6 @@ func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 			if err != nil {
 				return err
 			}
-			fmt.Printf("pr2: %x, %x\n", []byte{uint8(i)}, hash.Bytes())
 			cache.SetAccountHashWrite([]byte{uint8(i)}, hash.Bytes())
 			if err := accountIHCollector.Load(logPrefix, db,
 				dbutils.IntermediateHashOfAccountBucket,
@@ -218,9 +214,6 @@ func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 		hashCollector := func(keyHex []byte, hash []byte) error {
 			if len(keyHex) == 0 {
 				return nil
-			}
-			if len(keyHex) == 1 {
-				fmt.Printf("pr: %x, %x\n", keyHex, hash)
 			}
 			return accountIHCollector.Collect(keyHex, hash)
 		}
@@ -394,6 +387,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 	loader := trie.NewFlatDBTrieLoader(logPrefix)
 
 	if cache != nil {
+		defer func(t time.Time) { fmt.Printf("stage_interhashes.go:390: %s\n", time.Since(t)) }(time.Now())
 		var prefixes [16][][]byte
 		for i := range exclude {
 			id := exclude[i][0] / 16

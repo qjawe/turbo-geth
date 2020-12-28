@@ -222,7 +222,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, prefix []byte, quit <
 
 	logEvery := time.NewTicker(30 * time.Second)
 	defer logEvery.Stop()
-	defer func(t time.Time) { fmt.Printf("trie_root.go:225: %s\n", time.Since(t)) }(time.Now())
+	//defer func(t time.Time) { fmt.Printf("trie_root.go:225: %s\n", time.Since(t)) }(time.Now())
 	i1, i2, i3, i4 := 0, 0, 0, 0
 	for ihK, ihV, err := ih.Seek(prefix); ; ihK, ihV, err = ih.Next() { // no loop termination is at he end of loop
 		if err != nil {
@@ -327,7 +327,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, prefix []byte, quit <
 			return EmptyRoot, err
 		}
 	}
-	fmt.Printf("%d,%d,%d,%d\n", i1, i2, i3, i4)
+	//fmt.Printf("%d,%d,%d,%d\n", i1, i2, i3, i4)
 	return l.receiver.Root(), nil
 }
 
@@ -566,7 +566,6 @@ func (l *FlatDBTrieLoader) CalcTrieRootOnCache2(cache *shards.StateCache) (commo
 		if len(ihK) == 0 { // Loop termination
 			return nil
 		}
-		fmt.Printf("aa: %x,%x\n", ihK, ihV)
 		if err := l.receiver.Receive(AHashStreamItem, ihK, nil, nil, nil, ihV[:], 0); err != nil {
 			return err
 		}
