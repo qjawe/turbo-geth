@@ -205,15 +205,24 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, prefix []byte, quit <
 
 	accs, storages := NewStateCursor(tx.Cursor(dbutils.HashedAccountsBucket)), NewStateCursor(tx.Cursor(dbutils.HashedStorageBucket))
 	ihAccC, ihStorageC := tx.Cursor(dbutils.IntermediateHashOfAccountBucket), tx.CursorDupSort(dbutils.IntermediateHashOfStorageBucket)
+	iFiltered, iFilteredShort := 0, 0
 	var filter = func(prefix []byte) bool {
 		if !l.rd.Retain(prefix) {
 			return true
+		}
+		iFiltered++
+		if len(prefix) <= 2 {
+			iFilteredShort++
 		}
 		if err := l.hc(prefix, nil); err != nil {
 			panic(err)
 		}
 		return false
 	}
+	defer func() {
+		fmt.Printf("iFiltered: %d/%d\n", iFilteredShort, iFiltered)
+	}()
+
 	ih := IH(filter, ihAccC)
 	ihStorage := StorageIH(filter, ihStorageC)
 	_ = storages
