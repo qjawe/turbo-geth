@@ -33,7 +33,7 @@ func SpawnIntermediateHashesStage(s *StageState, db ethdb.Database, checkRoot bo
 		s.Done()
 		return nil
 	}
-	fmt.Printf("%d->%d\n", s.BlockNumber, to)
+	//fmt.Printf("%d->%d\n", s.BlockNumber, to)
 	var tx ethdb.DbWithPendingMutations
 	var useExternalTx bool
 	if hasTx, ok := db.(ethdb.HasTx); ok && hasTx.Tx() != nil {
