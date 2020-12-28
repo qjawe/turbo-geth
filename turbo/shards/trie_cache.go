@@ -369,10 +369,11 @@ func (sc *StateCache) WalkAccountHashes(walker func(prefix []byte) error) error 
 	return nil
 }
 
-func (sc *StateCache) AccountHashes(walker func(prefix []byte, h common.Hash) error) error {
+func (sc *StateCache) AccountHashes(prefix []byte, walker func(prefix []byte, h common.Hash) error) error {
 	var cur, prev *AccountHashItem
 	id := id(cur)
-	next := &AccountHashItem{addrHashPrefix: make([]byte, 0, 64)}
+	seek := &AccountHashItem{addrHashPrefix: make([]byte, 0, 64)}
+	seek.addrHashPrefix = append(seek.addrHashPrefix[:0], prefix...)
 	step := func(i btree.Item) bool {
 		it := i.(*AccountHashItem)
 		if it.HasFlag(AbsentFlag) || it.HasFlag(DeletedFlag) {
@@ -382,21 +383,25 @@ func (sc *StateCache) AccountHashes(walker func(prefix []byte, h common.Hash) er
 		return false
 	}
 	rw := sc.readWrites[id]
-	rw.Ascend(step)
+	rw.AscendGreaterOrEqual(seek, step)
 	for {
 		if cur == nil {
 			break
 		}
+		if prefix != nil && !bytes.HasPrefix(cur.addrHashPrefix, prefix) {
+			break
+		}
+
 		if err := walker(cur.addrHashPrefix, cur.hash); err != nil {
 			return err
 		}
 		prev = cur
 		cur = nil
-		ok := dbutils.NextNibblesSubtree(prev.addrHashPrefix, &next.addrHashPrefix) // go to sibling
+		ok := dbutils.NextNibblesSubtree(prev.addrHashPrefix, &seek.addrHashPrefix) // go to sibling
 		if !ok {
 			break
 		}
-		rw.AscendGreaterOrEqual(next, step)
+		rw.AscendGreaterOrEqual(seek, step)
 	}
 	if err := walker(nil, common.Hash{}); err != nil {
 		return err
@@ -404,10 +409,12 @@ func (sc *StateCache) AccountHashes(walker func(prefix []byte, h common.Hash) er
 	return nil
 }
 
-func (sc *StateCache) AccountHashes2(walker func(prefix []byte, h common.Hash) error) error {
+// [from:to)
+func (sc *StateCache) AccountHashes2(prefix []byte, walker func(prefix []byte, h common.Hash) error) error {
 	var cur, prev *AccountHashItem
 	id := id(cur)
-	next := &AccountHashItem{addrHashPrefix: make([]byte, 0, 64)}
+	seek := &AccountHashItem{addrHashPrefix: make([]byte, 0, 64)}
+	seek.addrHashPrefix = append(seek.addrHashPrefix[:0], prefix...)
 	step := func(i btree.Item) bool {
 		it := i.(*AccountHashItem)
 		if it.HasFlag(AbsentFlag) || it.HasFlag(DeletedFlag) {
@@ -417,21 +424,25 @@ func (sc *StateCache) AccountHashes2(walker func(prefix []byte, h common.Hash) e
 		return false
 	}
 	rw := sc.readWrites[id]
-	rw.Ascend(step)
+	rw.AscendGreaterOrEqual(seek, step)
 	for {
 		if cur == nil {
 			break
 		}
+		if prefix != nil && !bytes.HasPrefix(cur.addrHashPrefix, prefix) {
+			break
+		}
+
 		if err := walker(cur.addrHashPrefix, cur.hash); err != nil {
 			return err
 		}
 		prev = cur
 		cur = nil
-		ok := dbutils.NextNibblesSubtree(prev.addrHashPrefix, &next.addrHashPrefix) // go to sibling
+		ok := dbutils.NextNibblesSubtree(prev.addrHashPrefix, &seek.addrHashPrefix) // go to sibling
 		if !ok {
 			break
 		}
-		rw.AscendGreaterOrEqual(next, step)
+		rw.AscendGreaterOrEqual(seek, step)
 	}
 	if err := walker(nil, common.Hash{}); err != nil {
 		return err

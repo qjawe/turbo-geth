@@ -179,7 +179,7 @@ func (l *FlatDBTrieLoader) SetStreamReceiver(receiver StreamReceiver) {
 //    SkipAccounts:
 //		use(IH)
 //	}
-func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{}) (common.Hash, error) {
+func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, prefix []byte, quit <-chan struct{}) (common.Hash, error) {
 	var (
 		tx ethdb.Tx
 	)
@@ -224,7 +224,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 	defer logEvery.Stop()
 	defer func(t time.Time) { fmt.Printf("trie_root.go:225: %s\n", time.Since(t)) }(time.Now())
 	i1, i2, i3, i4 := 0, 0, 0, 0
-	for ihK, ihV, err := ih.First(); ; ihK, ihV, err = ih.Next() { // no loop termination is at he end of loop
+	for ihK, ihV, err := ih.Seek(prefix); ; ihK, ihV, err = ih.Next() { // no loop termination is at he end of loop
 		if err != nil {
 			return EmptyRoot, err
 		}
@@ -247,7 +247,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 				return EmptyRoot, err
 			}
 
-			if keyIsBefore(ihK, kHex) { // read all accounts until next IH
+			if keyIsBefore(ihK, kHex) || !bytes.HasPrefix(kHex, prefix) { // read all accounts until next IH
 				break
 			}
 			if err = l.accountValue.DecodeForStorage(v); err != nil {
@@ -308,7 +308,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 		}
 
 	SkipAccounts:
-		if len(ihK) == 0 { // Loop termination
+		if len(ihK) == 0 || !bytes.HasPrefix(ihK, prefix) { // Loop termination
 			break
 		}
 
@@ -317,7 +317,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 		}
 	}
 
-	if err := l.receiver.Receive(CutoffStreamItem, nil, nil, nil, nil, nil, 0); err != nil {
+	if err := l.receiver.Receive(CutoffStreamItem, nil, nil, nil, nil, nil, len(prefix)); err != nil {
 		return EmptyRoot, err
 	}
 
@@ -331,7 +331,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 	return l.receiver.Root(), nil
 }
 
-func (l *FlatDBTrieLoader) prep(accs *StateCursor, cache *shards.StateCache, quit <-chan struct{}) error {
+func (l *FlatDBTrieLoader) prep(accs *StateCursor, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) error {
 	defer func(t time.Time) { fmt.Printf("trie_root.go:326: %s\n", time.Since(t)) }(time.Now())
 	var prevIHK []byte
 	if err := cache.WalkAccountHashes(func(ihK []byte) error {
@@ -343,7 +343,7 @@ func (l *FlatDBTrieLoader) prep(accs *StateCursor, cache *shards.StateCache, qui
 		return err
 	}
 
-	if err := cache.AccountHashes(func(ihK []byte, _ common.Hash) error {
+	if err := cache.AccountHashes(prefix, func(ihK []byte, _ common.Hash) error {
 		if isDenseSequence(prevIHK, ihK) {
 			return nil
 		}
@@ -388,7 +388,7 @@ func (l *FlatDBTrieLoader) prep(accs *StateCursor, cache *shards.StateCache, qui
 	return nil
 }
 
-func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, cache *shards.StateCache, quit <-chan struct{}) (common.Hash, error) {
+func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) (common.Hash, error) {
 	var prevIHK []byte
 	//ihKSBuf := make([]byte, 256)
 	firstNotCoveredPrefix := make([]byte, 0, 128)
@@ -400,7 +400,7 @@ func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, cache *shards.Stat
 	defer func(t time.Time) { fmt.Printf("trie_root.go:375: %s\n", time.Since(t)) }(time.Now())
 
 	i1, i2, i3, i4 := 0, 0, 0, 0
-	if err := cache.AccountHashes2(func(ihK []byte, ihV common.Hash) error {
+	if err := cache.AccountHashes2(prefix, func(ihK []byte, ihV common.Hash) error {
 		i1++
 		if isDenseSequence(prevIHK, ihK) {
 			goto SkipAccounts
@@ -501,14 +501,14 @@ func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, cache *shards.Stat
 		return EmptyRoot, err
 	}
 
-	if err := l.receiver.Receive(CutoffStreamItem, nil, nil, nil, nil, nil, 0); err != nil {
+	if err := l.receiver.Receive(CutoffStreamItem, nil, nil, nil, nil, nil, len(prefix)); err != nil {
 		return EmptyRoot, err
 	}
 	fmt.Printf("%d,%d,%d,%d\n", i1, i2, i3, i4)
 	return EmptyRoot, nil
 }
 
-func (l *FlatDBTrieLoader) CalcTrieRootOnCache(db ethdb.Database, cache *shards.StateCache, quit <-chan struct{}) (common.Hash, error) {
+func (l *FlatDBTrieLoader) CalcTrieRootOnCache(db ethdb.Database, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) (common.Hash, error) {
 	var (
 		tx ethdb.Tx
 	)
@@ -548,8 +548,8 @@ func (l *FlatDBTrieLoader) CalcTrieRootOnCache(db ethdb.Database, cache *shards.
 	ihStorage := IH(filter, ihStorageC)
 	_, _, _, _ = ih, ihStorage, accs, storages
 
-	l.prep(accs, cache, quit)
-	l.post(ss, cache, quit)
+	l.prep(accs, prefix, cache, quit)
+	l.post(ss, prefix, cache, quit)
 
 	if !useExternalTx {
 		_, err := txDB.Commit()
@@ -558,6 +558,26 @@ func (l *FlatDBTrieLoader) CalcTrieRootOnCache(db ethdb.Database, cache *shards.
 		}
 	}
 	//fmt.Printf("%d,%d,%d,%d\n", i1, i2, i3, i4)
+	return l.receiver.Root(), nil
+}
+
+func (l *FlatDBTrieLoader) CalcTrieRootOnCache2(cache *shards.StateCache) (common.Hash, error) {
+	if err := cache.AccountHashes2([]byte{}, func(ihK []byte, ihV common.Hash) error {
+		if len(ihK) == 0 { // Loop termination
+			return nil
+		}
+		fmt.Printf("aa: %x,%x\n", ihK, ihV)
+		if err := l.receiver.Receive(AHashStreamItem, ihK, nil, nil, nil, ihV[:], 0); err != nil {
+			return err
+		}
+		return nil
+	}); err != nil {
+		return EmptyRoot, err
+	}
+
+	if err := l.receiver.Receive(CutoffStreamItem, nil, nil, nil, nil, nil, 0); err != nil {
+		return EmptyRoot, err
+	}
 	return l.receiver.Root(), nil
 }
 
@@ -864,6 +884,7 @@ type IHCursor struct {
 	c                     ethdb.Cursor
 	i                     int
 	prev                  []byte
+	seek                  []byte
 	cur                   []byte
 	next                  []byte
 	firstNotCoveredPrefix []byte
@@ -880,11 +901,17 @@ func (c *IHCursor) PrevKey() []byte {
 }
 
 func (c *IHCursor) FirstNotCoveredPrefix() []byte {
-	_ = dbutils.NextNibblesSubtree(c.prev, &c.firstNotCoveredPrefix)
-	if len(c.firstNotCoveredPrefix)%2 == 1 {
-		c.firstNotCoveredPrefix = append(c.firstNotCoveredPrefix, 0)
+	if len(c.prev) > 0 {
+		_ = dbutils.NextNibblesSubtree(c.prev, &c.firstNotCoveredPrefix)
+		if len(c.firstNotCoveredPrefix)%2 == 1 {
+			c.firstNotCoveredPrefix = append(c.firstNotCoveredPrefix, 0)
+		}
+		return c.firstNotCoveredPrefix
 	}
-	return c.firstNotCoveredPrefix
+	if len(c.seek)%2 == 1 {
+		c.seek = append(c.seek, 0)
+	}
+	return c.seek
 }
 
 func (c *IHCursor) First() (k, v []byte, err error) {
@@ -894,6 +921,22 @@ func (c *IHCursor) First() (k, v []byte, err error) {
 	}
 
 	if k == nil {
+		return nil, nil, nil
+	}
+	c.cur = append(c.cur[:0], k...)
+	return c.cur, v, nil
+}
+
+func (c *IHCursor) Seek(seek []byte) (k, v []byte, err error) {
+	c.seek = seek
+	k, v, err = c._seek(seek)
+	if err != nil {
+		return []byte{}, nil, err
+	}
+
+	c.prev = append(c.prev[:0], c.cur...)
+	if k == nil {
+		c.cur = nil
 		return nil, nil, nil
 	}
 	c.cur = append(c.cur[:0], k...)
