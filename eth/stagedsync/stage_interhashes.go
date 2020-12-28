@@ -213,12 +213,14 @@ func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 		buf.SetComparator(comparator)
 		storageIHCollector := etl.NewCollector(tmpdir, buf)
 		hashCollector := func(keyHex []byte, hash []byte) error {
+			return nil
 			if len(keyHex) == 0 {
 				return nil
 			}
 			return accountIHCollector.Collect(keyHex, hash)
 		}
 		storageHashCollector := func(accWithInc []byte, keyHex []byte, hash []byte) error {
+			return nil
 			if len(keyHex) == 0 {
 				return nil
 			}
@@ -244,25 +246,25 @@ func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 			"root hash", hash.Hex(),
 			"gen IH", generationIHTook,
 		)
-		if err := accountIHCollector.Load(logPrefix, db,
-			dbutils.IntermediateHashOfAccountBucket,
-			etl.IdentityLoadFunc,
-			etl.TransformArgs{
-				Quit: quit,
-			},
-		); err != nil {
-			return err
-		}
-		if err := storageIHCollector.Load(logPrefix, db,
-			dbutils.IntermediateHashOfStorageBucket,
-			etl.IdentityLoadFunc,
-			etl.TransformArgs{
-				Comparator: comparator,
-				Quit:       quit,
-			},
-		); err != nil {
-			return err
-		}
+		//if err := accountIHCollector.Load(logPrefix, db,
+		//	dbutils.IntermediateHashOfAccountBucket,
+		//	etl.IdentityLoadFunc,
+		//	etl.TransformArgs{
+		//		Quit: quit,
+		//	},
+		//); err != nil {
+		//	return err
+		//}
+		//if err := storageIHCollector.Load(logPrefix, db,
+		//	dbutils.IntermediateHashOfStorageBucket,
+		//	etl.IdentityLoadFunc,
+		//	etl.TransformArgs{
+		//		Comparator: comparator,
+		//		Quit:       quit,
+		//	},
+		//); err != nil {
+		//	return err
+		//}
 	}
 	log.Info(fmt.Sprintf("[%s] Regeneration ended", logPrefix))
 
