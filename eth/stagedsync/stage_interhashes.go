@@ -21,7 +21,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/turbo/trie"
 )
 
-func SpawnIntermediateHashesStage(s *StageState, db ethdb.Database, writeDB ethdb.Database, checkRoot bool, cache *shards.StateCache, tmpdir string, quit <-chan struct{}) error {
+func SpawnIntermediateHashesStage(s *StageState, db ethdb.Database, checkRoot bool, cache *shards.StateCache, tmpdir string, quit <-chan struct{}) error {
 	to, err := s.ExecutionAt(db)
 	if err != nil {
 		return err
@@ -36,12 +36,12 @@ func SpawnIntermediateHashesStage(s *StageState, db ethdb.Database, writeDB ethd
 	//fmt.Printf("%d->%d\n", s.BlockNumber, to)
 	var tx ethdb.DbWithPendingMutations
 	var useExternalTx bool
-	if hasTx, ok := writeDB.(ethdb.HasTx); ok && hasTx.Tx() != nil {
-		tx = writeDB.(ethdb.DbWithPendingMutations)
+	if hasTx, ok := db.(ethdb.HasTx); ok && hasTx.Tx() != nil {
+		tx = db.(ethdb.DbWithPendingMutations)
 		useExternalTx = true
 	} else {
 		var err error
-		tx, err = writeDB.Begin(context.Background(), ethdb.RW)
+		tx, err = db.Begin(context.Background(), ethdb.RW)
 		if err != nil {
 			return err
 		}
@@ -62,7 +62,7 @@ func SpawnIntermediateHashesStage(s *StageState, db ethdb.Database, writeDB ethd
 			return err
 		}
 	} else {
-		if err := incrementIntermediateHashes(logPrefix, s, db, tx, to, checkRoot, cache, tmpdir, expectedRootHash, quit); err != nil {
+		if err := incrementIntermediateHashes(logPrefix, s, tx, to, checkRoot, cache, tmpdir, expectedRootHash, quit); err != nil {
 			return err
 		}
 	}
@@ -372,7 +372,7 @@ func (p *HashPromoter) Unwind(logPrefix string, s *StageState, u *UnwindState, s
 	return nil
 }
 
-func incrementIntermediateHashes(logPrefix string, s *StageState, readDB ethdb.Database, db ethdb.Database, to uint64, checkRoot bool, cache *shards.StateCache, tmpdir string, expectedRootHash common.Hash, quit <-chan struct{}) error {
+func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Database, to uint64, checkRoot bool, cache *shards.StateCache, tmpdir string, expectedRootHash common.Hash, quit <-chan struct{}) error {
 	p := NewHashPromoter(db, quit)
 	p.TempDir = tmpdir
 	var exclude [][]byte
