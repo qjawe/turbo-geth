@@ -113,7 +113,7 @@ func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 			buf.SetComparator(comparator)
 			storageIHCollector := etl.NewCollector(tmpdir, buf)
 			hashCollector := func(keyHex []byte, hash []byte) error {
-				if len(keyHex) == 0 {
+				if len(keyHex) <= 2 {
 					return nil
 				}
 				return accountIHCollector.Collect(keyHex, hash)
@@ -213,7 +213,7 @@ func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 		buf.SetComparator(comparator)
 		storageIHCollector := etl.NewCollector(tmpdir, buf)
 		hashCollector := func(keyHex []byte, hash []byte) error {
-			if len(keyHex) == 0 {
+			if len(keyHex) <= 2 {
 				return nil
 			}
 			return accountIHCollector.Collect(keyHex, hash)
@@ -407,7 +407,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 			buf.SetComparator(comparator)
 			storageIHCollector := etl.NewCollector(tmpdir, buf)
 			hashCollector := func(keyHex []byte, hash []byte) error {
-				if len(keyHex) == 0 {
+				if len(keyHex) <= 2 {
 					return nil
 				}
 				return accountIHCollector.Collect(keyHex, hash)
@@ -579,7 +579,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 		buf.SetComparator(comparator)
 		storageIHCollector := etl.NewCollector(tmpdir, buf)
 		hashCollector := func(keyHex []byte, hash []byte) error {
-			if len(keyHex) == 0 {
+			if len(keyHex) <= 2 {
 				return nil
 			}
 			return accountIHCollector.Collect(keyHex, hash)
@@ -711,7 +711,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 			buf.SetComparator(comparator)
 			storageIHCollector := etl.NewCollector(tmpdir, buf)
 			hashCollector := func(keyHex []byte, hash []byte) error {
-				if len(keyHex) == 0 {
+				if len(keyHex) <= 2 {
 					return nil
 				}
 				return accountIHCollector.Collect(keyHex, hash)
@@ -812,7 +812,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 		buf.SetComparator(comparator)
 		storageIHCollector := etl.NewCollector(tmpdir, buf)
 		hashCollector := func(keyHex []byte, hash []byte) error {
-			if len(keyHex) == 0 {
+			if len(keyHex) <= 2 {
 				return nil
 			}
 			return accountIHCollector.Collect(keyHex, hash)
