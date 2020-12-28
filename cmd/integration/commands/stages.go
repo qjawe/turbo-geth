@@ -2,7 +2,6 @@ package commands
 
 import (
 	"context"
-	"encoding/binary"
 	"fmt"
 	"path"
 	"runtime"
@@ -13,7 +12,6 @@ import (
 
 	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/turbo-geth/cmd/utils"
-	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/common/etl"
 	"github.com/ledgerwatch/turbo-geth/consensus/ethash"
