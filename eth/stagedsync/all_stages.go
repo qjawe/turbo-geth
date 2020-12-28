@@ -169,7 +169,7 @@ func createStageBuilders(blocks []*types.Block, blockNum uint64, checkRoot bool)
 							}
 							c.Close()
 						*/
-						return SpawnIntermediateHashesStage(s, world.TX, checkRoot /* checkRoot */, world.cache, world.tmpdir, world.QuitCh)
+						return SpawnIntermediateHashesStage(s, world.db, world.TX, checkRoot /* checkRoot */, world.cache, world.tmpdir, world.QuitCh)
 					},
 					UnwindFunc: func(u *UnwindState, s *StageState) error {
 						return UnwindIntermediateHashesStage(u, s, world.TX, world.cache, world.tmpdir, world.QuitCh)

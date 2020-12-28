@@ -21,7 +21,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/turbo/trie"
 )
 
-func SpawnIntermediateHashesStage(s *StageState, db ethdb.Database, checkRoot bool, cache *shards.StateCache, tmpdir string, quit <-chan struct{}) error {
+func SpawnIntermediateHashesStage(s *StageState, db ethdb.Database, writeDB ethdb.Database, checkRoot bool, cache *shards.StateCache, tmpdir string, quit <-chan struct{}) error {
 	to, err := s.ExecutionAt(db)
 	if err != nil {
 		return err
@@ -36,12 +36,12 @@ func SpawnIntermediateHashesStage(s *StageState, db ethdb.Database, checkRoot bo
 	//fmt.Printf("%d->%d\n", s.BlockNumber, to)
 	var tx ethdb.DbWithPendingMutations
 	var useExternalTx bool
-	if hasTx, ok := db.(ethdb.HasTx); ok && hasTx.Tx() != nil {
-		tx = db.(ethdb.DbWithPendingMutations)
+	if hasTx, ok := writeDB.(ethdb.HasTx); ok && hasTx.Tx() != nil {
+		tx = writeDB.(ethdb.DbWithPendingMutations)
 		useExternalTx = true
 	} else {
 		var err error
-		tx, err = db.Begin(context.Background(), ethdb.RW)
+		tx, err = writeDB.Begin(context.Background(), ethdb.RW)
 		if err != nil {
 			return err
 		}
@@ -62,7 +62,7 @@ func SpawnIntermediateHashesStage(s *StageState, db ethdb.Database, checkRoot bo
 			return err
 		}
 	} else {
-		if err := incrementIntermediateHashes(logPrefix, s, tx, to, checkRoot, cache, tmpdir, expectedRootHash, quit); err != nil {
+		if err := incrementIntermediateHashes(logPrefix, s, db, tx, to, checkRoot, cache, tmpdir, expectedRootHash, quit); err != nil {
 			return err
 		}
 	}
@@ -103,7 +103,6 @@ func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 		}
 	}
 	c.Close()
-	loader := trie.NewFlatDBTrieLoader(logPrefix)
 
 	if cache != nil {
 		for i := 0; i < 16; i++ {
@@ -128,6 +127,7 @@ func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 				}
 				return storageIHCollector.Collect(accWithInc, append(keyHex, hash...))
 			}
+			loader := trie.NewFlatDBTrieLoader(logPrefix)
 			// hashCollector in the line below will collect deletes
 			if err := loader.Reset(unfurl, hashCollector, storageHashCollector, false); err != nil {
 				return err
@@ -158,6 +158,7 @@ func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 			}
 		}
 
+		loader := trie.NewFlatDBTrieLoader(logPrefix)
 		if err := loader.Reset(trie.NewRetainList(0), func(keyHex []byte, hash []byte) error {
 			return nil
 		}, func(accWithInc []byte, keyHex []byte, hash []byte) error {
@@ -226,6 +227,7 @@ func regenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 			}
 			return storageIHCollector.Collect(accWithInc, append(keyHex, hash...))
 		}
+		loader := trie.NewFlatDBTrieLoader(logPrefix)
 		if err := loader.Reset(trie.NewRetainList(0), hashCollector /* HashCollector */, storageHashCollector, false); err != nil {
 			return err
 		}
@@ -370,7 +372,7 @@ func (p *HashPromoter) Unwind(logPrefix string, s *StageState, u *UnwindState, s
 	return nil
 }
 
-func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Database, to uint64, checkRoot bool, cache *shards.StateCache, tmpdir string, expectedRootHash common.Hash, quit <-chan struct{}) error {
+func incrementIntermediateHashes(logPrefix string, s *StageState, readDB ethdb.Database, db ethdb.Database, to uint64, checkRoot bool, cache *shards.StateCache, tmpdir string, expectedRootHash common.Hash, quit <-chan struct{}) error {
 	p := NewHashPromoter(db, quit)
 	p.TempDir = tmpdir
 	var exclude [][]byte
@@ -384,7 +386,6 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 	if err := p.Promote(logPrefix, s, s.BlockNumber, to, true /* storage */, collect); err != nil {
 		return err
 	}
-	loader := trie.NewFlatDBTrieLoader(logPrefix)
 
 	if cache != nil {
 		defer func(t time.Time) { fmt.Printf("stage_interhashes.go:390: %s\n", time.Since(t)) }(time.Now())
@@ -421,6 +422,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 				return storageIHCollector.Collect(accWithInc, append(keyHex, hash...))
 			}
 			// hashCollector in the line below will collect deletes
+			loader := trie.NewFlatDBTrieLoader(logPrefix)
 			if err := loader.Reset(unfurl, hashCollector, storageHashCollector, false); err != nil {
 				return err
 			}
@@ -450,6 +452,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 			}
 		}
 
+		loader := trie.NewFlatDBTrieLoader(logPrefix)
 		if err := loader.Reset(trie.NewRetainList(0), func(keyHex []byte, hash []byte) error {
 			return nil
 		}, func(accWithInc []byte, keyHex []byte, hash []byte) error {
@@ -591,6 +594,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 			return storageIHCollector.Collect(accWithInc, append(keyHex, hash...))
 		}
 		// hashCollector in the line below will collect deletes
+		loader := trie.NewFlatDBTrieLoader(logPrefix)
 		if err := loader.Reset(unfurl, hashCollector, storageHashCollector, false); err != nil {
 			return err
 		}
@@ -687,7 +691,6 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 	for i := range exclude {
 		unfurl.AddKey(exclude[i])
 	}
-	loader := trie.NewFlatDBTrieLoader(logPrefix)
 
 	if cache != nil {
 		var prefixes [16][][]byte
@@ -722,6 +725,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 				}
 				return storageIHCollector.Collect(accWithInc, append(keyHex, hash...))
 			}
+			loader := trie.NewFlatDBTrieLoader(logPrefix)
 			// hashCollector in the line below will collect deletes
 			if err := loader.Reset(unfurl, hashCollector, storageHashCollector, false); err != nil {
 				return err
@@ -752,6 +756,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 			}
 		}
 
+		loader := trie.NewFlatDBTrieLoader(logPrefix)
 		if err := loader.Reset(trie.NewRetainList(0), func(keyHex []byte, hash []byte) error {
 			return nil
 		}, func(accWithInc []byte, keyHex []byte, hash []byte) error {
@@ -822,6 +827,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 			return storageIHCollector.Collect(accWithInc, append(keyHex, hash...))
 		}
 		// hashCollector in the line below will collect deletes
+		loader := trie.NewFlatDBTrieLoader(logPrefix)
 		if err := loader.Reset(unfurl, hashCollector, storageHashCollector, false); err != nil {
 			return err
 		}
