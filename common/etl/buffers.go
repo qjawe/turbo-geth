@@ -48,14 +48,14 @@ var (
 
 func NewSortableBuffer(bufferOptimalSize datasize.ByteSize) *sortableBuffer {
 	return &sortableBuffer{
-		entries:     make([]sortableBufferEntry, 0),
+		entries:     make([][]byte, 0),
 		size:        0,
 		optimalSize: int(bufferOptimalSize.Bytes()),
 	}
 }
 
 type sortableBuffer struct {
-	entries     []sortableBufferEntry
+	entries     [][]byte
 	size        int
 	optimalSize int
 	comparator  dbutils.CmpFunc
@@ -64,7 +64,7 @@ type sortableBuffer struct {
 func (b *sortableBuffer) Put(k, v []byte) {
 	b.size += len(k)
 	b.size += len(v)
-	b.entries = append(b.entries, sortableBufferEntry{k, v})
+	b.entries = append(b.entries, k, v)
 }
 
 func (b *sortableBuffer) Size() int {
@@ -72,7 +72,7 @@ func (b *sortableBuffer) Size() int {
 }
 
 func (b *sortableBuffer) Len() int {
-	return len(b.entries)
+	return len(b.entries) / 2
 }
 
 func (b *sortableBuffer) SetComparator(cmp dbutils.CmpFunc) {
@@ -81,17 +81,18 @@ func (b *sortableBuffer) SetComparator(cmp dbutils.CmpFunc) {
 
 func (b *sortableBuffer) Less(i, j int) bool {
 	if b.comparator != nil {
-		return b.comparator(b.entries[i].key, b.entries[j].key, b.entries[i].value, b.entries[j].value) < 0
+		return b.comparator(b.entries[i*2], b.entries[j*2], b.entries[i*2+1], b.entries[j*2+1]) < 0
 	}
-	return bytes.Compare(b.entries[i].key, b.entries[j].key) < 0
+	return bytes.Compare(b.entries[i*2], b.entries[j*2]) < 0
 }
 
 func (b *sortableBuffer) Swap(i, j int) {
-	b.entries[i], b.entries[j] = b.entries[j], b.entries[i]
+	b.entries[i*2], b.entries[j*2] = b.entries[j*2], b.entries[i*2]
+	b.entries[i*2+1], b.entries[j*2+1] = b.entries[j*2+1], b.entries[i*2+1]
 }
 
 func (b *sortableBuffer) Get(i int) sortableBufferEntry {
-	return b.entries[i]
+	return sortableBufferEntry{b.entries[i*1], b.entries[i*1+1]}
 }
 
 func (b *sortableBuffer) Reset() {
@@ -103,7 +104,7 @@ func (b *sortableBuffer) Sort() {
 }
 
 func (b *sortableBuffer) GetEntries() []sortableBufferEntry {
-	return b.entries
+	return nil
 }
 
 func (b *sortableBuffer) CheckFlushSize() bool {
