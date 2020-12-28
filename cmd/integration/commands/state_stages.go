@@ -232,6 +232,12 @@ func loopIh(db ethdb.Database, ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	db.Walk(dbutils.IntermediateHashOfAccountBucket, nil, 0, func(k, v []byte) (bool, error) {
+		if len(k) <= 2 {
+			return true, db.Delete(dbutils.IntermediateHashOfAccountBucket, k, v)
+		}
+		return true, nil
+	})
 
 	var cacheSize datasize.ByteSize
 	must(cacheSize.UnmarshalText([]byte(cacheSizeStr)))
@@ -271,13 +277,6 @@ func loopIh(db ethdb.Database, ctx context.Context) error {
 
 	st.DisableStages(stages.HashState)
 	st.EnableStages(stages.IntermediateHashes)
-
-	db.Walk(dbutils.IntermediateHashOfAccountBucket, nil, 0, func(k, v []byte) (bool, error) {
-		if len(k) <= 2 {
-			return true, db.Delete(dbutils.IntermediateHashOfAccountBucket, k, v)
-		}
-		return true, nil
-	})
 
 	for {
 		select {
