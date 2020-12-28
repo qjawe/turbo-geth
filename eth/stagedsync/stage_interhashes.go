@@ -387,8 +387,8 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 		return err
 	}
 
+	defer func(t time.Time) { fmt.Printf("stage_interhashes.go:390: %s\n", time.Since(t)) }(time.Now())
 	if cache != nil {
-		defer func(t time.Time) { fmt.Printf("stage_interhashes.go:390: %s\n", time.Since(t)) }(time.Now())
 		var prefixes [16][][]byte
 		for i := range exclude {
 			id := exclude[i][0] / 16
