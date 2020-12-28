@@ -692,14 +692,6 @@ func newSync(quitCh <-chan struct{}, db ethdb.Database, tx ethdb.Database, hook 
 	var cache *shards.StateCache
 	if cacheSize > 0 {
 		cache = shards.NewStateCache(32, cacheSize)
-		db.Walk(dbutils.IntermediateHashOfAccountBucket, nil, 0, func(k, v []byte) (bool, error) {
-			cache.SetAccountHashRead(k, v)
-			return true, nil
-		})
-		db.Walk(dbutils.IntermediateHashOfStorageBucket, nil, 0, func(k, v []byte) (bool, error) {
-			cache.SetStorageHashRead(common.BytesToHash(k[:32]), binary.BigEndian.Uint64(k[32:40]), v[:len(v)-32], common.BytesToHash(v[len(v)-32:]))
-			return true, nil
-		})
 	}
 	st, err := stagedsync.New(
 		stagedsync.DefaultStages(),
