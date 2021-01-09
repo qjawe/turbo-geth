@@ -386,6 +386,8 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, quit <-chan struct{})
 		return !l.rd.Retain(k)
 	}
 	ih := IH(filter, tx.CursorDupSort(l.intermediateHashesBucket))
+	defer func(t time.Time) { fmt.Printf("trie_root.go:389: %s\n", time.Since(t)) }(time.Now())
+
 	if err := l.iteration(c, ih, true /* first */); err != nil {
 		return EmptyRoot, err
 	}
