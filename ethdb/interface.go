@@ -32,6 +32,14 @@ type Putter interface {
 	Put(bucket string, key, value []byte) error
 }
 
+type GetterIterator interface {
+	Next() ([]byte, []byte, bool, error)
+}
+
+type GetterMultiIterator interface {
+	Next() (int, []byte, []byte, bool, error)
+}
+
 // Getter wraps the database read operations.
 type Getter interface {
 	// Get returns the value for a given key if it's present.
@@ -44,14 +52,14 @@ type Getter interface {
 	// Has indicates whether a key exists in the database.
 	Has(bucket string, key []byte) (bool, error)
 
-	// Walk iterates over entries with keys greater or equal to startkey.
+	// Iter iterates over entries with keys greater or equal to startkey.
 	// Only the keys whose first fixedbits match those of startkey are iterated over.
 	// walker is called for each eligible entry.
 	// If walker returns false or an error, the walk stops.
-	Walk(bucket string, startkey []byte, fixedbits int, walker func(k, v []byte) (bool, error)) error
+	Iter(bucket string, startkey []byte, fixedbits int) GetterIterator
 
-	// MultiWalk is similar to multiple Walk calls folded into one.
-	MultiWalk(bucket string, startkeys [][]byte, fixedbits []int, walker func(int, []byte, []byte) error) error
+	// MultiIter is similar to multiple Iter calls folded into one.
+	MultiIter(bucket string, startkeys [][]byte, fixedbits []int) GetterMultiIterator
 }
 
 type GetterPutter interface {

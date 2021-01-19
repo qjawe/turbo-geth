@@ -242,6 +242,41 @@ func (m *TxDb) Walk(bucket string, startkey []byte, fixedbits int, walker func([
 	return Walk(c, startkey, fixedbits, walker)
 }
 
+type curIterator struct {
+	c          Cursor
+	first      bool
+	startkey   []byte
+	fixedbits  int
+	fixedbytes int
+	mask       byte
+}
+
+func MakeCurIterator(c Cursor, startkey []byte, fixedbits int) *curIterator {
+	fixedbytes, mask := Bytesmask(fixedbits)
+	return &curIterator{
+		c: c, first: true, startkey: startkey, fixedbits: fixedbits, fixedbytes: fixedbytes, mask: mask,
+	}
+}
+
+func (s *curIterator) Next() (k []byte, v []byte, hasMore bool, err error) {
+	if s.first {
+		k, v, err = s.c.Seek(s.startkey)
+		s.first = false
+	} else {
+		k, v, err = s.c.Next()
+	}
+
+	if err != nil {
+		return nil, nil, false, err
+	}
+
+	if k != nil && len(k) >= s.fixedbytes && (s.fixedbits == 0 || bytes.Equal(k[:s.fixedbytes-1], s.startkey[:s.fixedbytes-1]) && (k[s.fixedbytes-1]&s.mask) == (s.startkey[s.fixedbytes-1]&s.mask)) {
+		return k, v, true, nil
+	}
+
+	return nil, nil, false, nil
+}
+
 func Walk(c Cursor, startkey []byte, fixedbits int, walker func(k, v []byte) (bool, error)) error {
 	fixedbytes, mask := Bytesmask(fixedbits)
 	k, v, err := c.Seek(startkey)
@@ -285,6 +320,80 @@ func (m *TxDb) MultiWalk(bucket string, startkeys [][]byte, fixedbits []int, wal
 	c := m.tx.Cursor(bucket) // create new cursor, then call other methods of TxDb inside MultiWalk callback will not affect this cursor
 	defer c.Close()
 	return MultiWalk(c, startkeys, fixedbits, walker)
+}
+
+type curMultiIterator struct {
+	c          Cursor
+	first      bool
+	rangeIdx   int
+	startkeys  [][]byte
+	startkey   []byte
+	fixedbits  []int
+	fixedbytes int
+	mask       byte
+}
+
+func MakeCurMultiIterator(c Cursor, startkeys [][]byte, fixedbits []int) *curMultiIterator {
+	rangeIdx := 0 // What is the current range we are extracting
+	fixedbytes, mask := Bytesmask(fixedbits[rangeIdx])
+	startkey := startkeys[rangeIdx]
+	return &curMultiIterator{
+		c: c, first: true, rangeIdx: rangeIdx, startkeys: startkeys, startkey: startkey, fixedbits: fixedbits, fixedbytes: fixedbytes, mask: mask,
+	}
+}
+
+func (s *curMultiIterator) Next() (r int, k []byte, v []byte, hasMore bool, err error) {
+	if s.first {
+		s.first = false
+		k, v, err = s.c.Seek(s.startkey)
+		if err != nil {
+			return 0, nil, nil, false, err
+		}
+	}
+
+	for {
+		// Adjust rangeIdx if needed
+		if s.fixedbytes > 0 {
+			cmp := int(-1)
+			for cmp != 0 {
+				cmp = bytes.Compare(k[:s.fixedbytes-1], s.startkey[:s.fixedbytes-1])
+				if cmp == 0 {
+					k1 := k[s.fixedbytes-1] & s.mask
+					k2 := s.startkey[s.fixedbytes-1] & s.mask
+					if k1 < k2 {
+						cmp = -1
+					} else if k1 > k2 {
+						cmp = 1
+					}
+				}
+				if cmp < 0 {
+					k, v, err = s.c.Seek(s.startkey)
+					if err != nil {
+						return 0, nil, nil, false, err
+					}
+					if k == nil {
+						return 0, nil, nil, false, nil
+					}
+				} else if cmp > 0 {
+					s.rangeIdx++
+					if s.rangeIdx == len(s.startkeys) {
+						return 0, nil, nil, false, nil
+					}
+					s.fixedbytes, s.mask = Bytesmask(s.fixedbits[s.rangeIdx])
+					s.startkey = s.startkeys[s.rangeIdx]
+				}
+			}
+		}
+		if len(v) > 0 {
+			return s.rangeIdx, k, v, true, nil
+		}
+		k, v, err = s.c.Next()
+		if err != nil {
+			return 0, nil, nil, false, err
+		}
+	}
+
+	return 0, nil, nil, false, nil
 }
 
 func MultiWalk(c Cursor, startkeys [][]byte, fixedbits []int, walker func(int, []byte, []byte) error) error {
