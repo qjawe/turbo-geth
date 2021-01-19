@@ -39,10 +39,16 @@ type structInfoReceiver interface {
 	branchHash(set uint16) error
 	hash(hash []byte) error
 	topHash() []byte
+	topHashes(prefix []byte, set uint16, branchSet uint16) []byte
+	printTopHashes(prefix []byte, set uint16, branchSet uint16)
 }
 
 // hashCollector gets called whenever there might be a need to create intermediate hash record
 type HashCollector func(keyHex []byte, hash []byte) error
+type StorageHashCollector func(accWithInc []byte, keyHex []byte, hash []byte) error
+
+type HashCollector2 func(keyHex []byte, set uint16, branchesSet uint16, hashes []byte, rootHash []byte) error
+type StorageHashCollector2 func(accWithInc []byte, keyHex []byte, set uint16, branchSet uint16, hashes []byte, rootHash []byte) error
 
 func calcPrecLen(groups []uint16) int {
 	if len(groups) == 0 {
@@ -71,7 +77,8 @@ type GenStructStepLeafData struct {
 func (GenStructStepLeafData) GenStructStepData() {}
 
 type GenStructStepHashData struct {
-	Hash common.Hash
+	Hash     common.Hash
+	IsBranch bool
 }
 
 func (GenStructStepHashData) GenStructStepData() {}
@@ -213,5 +220,166 @@ func GenStructStep(
 		}
 	}
 	return nil, nil
+}
 
+func GenStructStep2(
+	retain func(prefix []byte) bool,
+	curr, succ []byte,
+	e structInfoReceiver,
+	h HashCollector2,
+	data GenStructStepData,
+	groups []uint16,
+	branches []uint16,
+	trace bool,
+) ([]uint16, []uint16, error) {
+	for precLen, buildExtensions := calcPrecLen(groups), false; precLen >= 0; precLen, buildExtensions = calcPrecLen(groups), true {
+		var precExists = len(groups) > 0
+		// Calculate the prefix of the smallest prefix group containing curr
+		var precLen int
+		if len(groups) > 0 {
+			precLen = len(groups) - 1
+		}
+		succLen := prefixLen(succ, curr)
+		var maxLen int
+		if precLen > succLen {
+			maxLen = precLen
+		} else {
+			maxLen = succLen
+		}
+		if trace || maxLen >= len(curr) {
+			fmt.Printf("curr: %x, succ: %x, maxLen %d, groups: %b, precLen: %d, succLen: %d, buildExtensions: %t\n", curr, succ, maxLen, groups, precLen, succLen, buildExtensions)
+		}
+		// Add the digit immediately following the max common prefix and compute length of remainder length
+		extraDigit := curr[maxLen]
+		for maxLen >= len(groups) {
+			groups = append(groups, 0)
+			branches = append(branches, 0)
+		}
+		groups[maxLen] |= (uint16(1) << extraDigit)
+		remainderStart := maxLen
+		if len(succ) > 0 || precExists {
+			remainderStart++
+		}
+		remainderLen := len(curr) - remainderStart
+		//fmt.Printf("groups is now %b\n", groups)
+
+		if !buildExtensions {
+			switch v := data.(type) {
+			case *GenStructStepHashData:
+				branches[maxLen] |= (uint16(1) << curr[maxLen])
+				/* building a hash */
+				if err := e.hash(v.Hash[:]); err != nil {
+					return nil, nil, err
+				}
+				buildExtensions = true
+			case *GenStructStepAccountData:
+				if retain(curr[:maxLen]) {
+					if err := e.accountLeaf(remainderLen, curr, &v.Balance, v.Nonce, v.Incarnation, v.FieldSet, codeSizeUncached); err != nil {
+						return nil, nil, err
+					}
+				} else {
+					if err := e.accountLeafHash(remainderLen, curr, &v.Balance, v.Nonce, v.Incarnation, v.FieldSet); err != nil {
+						return nil, nil, err
+					}
+				}
+			case *GenStructStepLeafData:
+				/* building leafs */
+				if retain(curr[:maxLen]) {
+					if err := e.leaf(remainderLen, curr, v.Value); err != nil {
+						return nil, nil, err
+					}
+				} else {
+					if err := e.leafHash(remainderLen, curr, v.Value); err != nil {
+						return nil, nil, err
+					}
+				}
+			default:
+				panic(fmt.Errorf("unknown data type: %T", data))
+			}
+		}
+
+		if buildExtensions {
+			if remainderLen > 0 {
+				if trace {
+					fmt.Printf("Extension %x\n", curr[remainderStart:remainderStart+remainderLen])
+				}
+				/* building extensions */
+				if retain(curr[:maxLen]) {
+					if err := e.extension(curr[remainderStart : remainderStart+remainderLen]); err != nil {
+						return nil, nil, err
+					}
+				} else {
+					if err := e.extensionHash(curr[remainderStart : remainderStart+remainderLen]); err != nil {
+						return nil, nil, err
+					}
+				}
+			}
+		}
+		// Check for the optional part
+		if precLen <= succLen && len(succ) > 0 {
+			return groups, branches, nil
+		}
+		// Close the immediately encompassing prefix group, if needed
+		if len(succ) > 0 || precExists {
+			var hashes []byte
+			if maxLen > 0 {
+				branches[maxLen-1] |= (uint16(1) << curr[maxLen-1])
+			}
+
+			//e.printTopHashes(curr[:maxLen], groups[maxLen], 0)
+			if h != nil {
+				if branches[maxLen] == 0 {
+					if err := h(curr[:maxLen], 0, 0, nil, nil); err != nil {
+						return nil, nil, err
+					}
+				} else {
+					//for i := 0; i < 16; i++ {
+					//	if ((uint16(1)<<i)&branches[maxLen]) != 0 && ((uint16(1)<<i)&groups[maxLen]) == 0 {
+					//		panic(fmt.Sprintf("invariant failed: maxLen=%d, %x,%b,%b\n", maxLen, curr[:maxLen], branches, groups))
+					//	}
+					//}
+					hashes = e.topHashes(curr[:maxLen], groups[maxLen], branches[maxLen])
+					if maxLen > 0 {
+						if err := h(curr[:maxLen], groups[maxLen], branches[maxLen], hashes, nil); err != nil {
+							return nil, nil, err
+						}
+					}
+				}
+			}
+			if retain(curr[:maxLen]) {
+				if err := e.branch(groups[maxLen]); err != nil {
+					return nil, nil, err
+				}
+			} else {
+				if err := e.branchHash(groups[maxLen]); err != nil {
+					return nil, nil, err
+				}
+			}
+			if h != nil && maxLen == 0 {
+				if branches[maxLen] > 0 {
+					if err := h(curr[:maxLen], groups[maxLen], branches[maxLen], hashes, e.topHash()); err != nil {
+						return nil, nil, err
+					}
+				}
+			}
+			branches = branches[:maxLen]
+		}
+		groups = groups[:maxLen]
+		if maxLen < len(branches) {
+			branches = branches[:maxLen+1]
+		}
+		// Check the end of recursion
+		if precLen == 0 {
+			return groups, branches, nil
+		}
+		// Identify preceding key for the buildExtensions invocation
+		curr = curr[:precLen]
+		for len(groups) > 0 && groups[len(groups)-1] == 0 {
+			groups = groups[:len(groups)-1]
+			if len(branches) > succLen+1 {
+				branches = branches[:len(branches)-1]
+			}
+		}
+	}
+	return nil, nil, nil
 }

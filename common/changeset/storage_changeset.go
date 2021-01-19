@@ -106,7 +106,7 @@ func RewindData(db ethdb.Getter, timestampSrc, timestampDst uint64) (map[string]
 
 // RewindDataPlain generates rewind data for all plain buckets between the timestamp
 // timestapSrc is the current timestamp, and timestamp Dst is where we rewind
-func RewindDataPlain(db ethdb.Getter, timestampSrc, timestampDst uint64) (map[string][]byte, map[string][]byte, error) {
+func RewindData(db ethdb.Getter, timestampSrc, timestampDst uint64) (map[string][]byte, map[string][]byte, error) {
 	// Collect list of buckets and keys that need to be considered
 	collector := newRewindDataCollector()
 

@@ -2287,7 +2287,7 @@ typedef MDBX_DP *MDBX_DPL;
 
 #if MDBX_HUGE_TRANSACTIONS
 #define MDBX_PNL_MAX                                                           \
-  ((1u << 26) - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(pgno_t))
+  ((1u << 30) - 2 - MDBX_ASSUME_MALLOC_OVERHEAD / sizeof(pgno_t))
 #define MDBX_DPL_TXNFULL (MDBX_PNL_MAX / 2)
 #else
 #define MDBX_PNL_MAX                                                           \
