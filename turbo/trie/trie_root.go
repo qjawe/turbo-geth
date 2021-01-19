@@ -25,12 +25,12 @@ on each level of trie calculates intermediate hash of underlying data.
 **Practically:** It can be implemented as "Preorder trie traversal" (Preorder - visit Root, visit Left, visit Right).
 But, let's make couple observations to make traversal over huge state efficient.
 
-**Observation 1:** `CurrentStateBucketOld2` already stores state keys in sorted way.
+**Observation 1:** `IntermediateHashOfAccountBucket` already stores state keys in sorted way.
 Iteration over this bucket will retrieve keys in same order as "Preorder trie traversal".
 
 **Observation 2:** each Eth block - changes not big part of state - it means most of Merkle trie intermediate hashes will not change.
-It means we effectively can cache them. `IntermediateTrieHashBucketOld2` stores "Intermediate hashes of all Merkle trie levels".
-It also sorted and Iteration over `IntermediateTrieHashBucketOld2` will retrieve keys in same order as "Preorder trie traversal".
+It means we effectively can cache them. `IntermediateHashOfAccountBucket` stores "Intermediate hashes of all Merkle trie levels".
+It also sorted and Iteration over `IntermediateHashOfAccountBucket` will retrieve keys in same order as "Preorder trie traversal".
 
 **Implementation:** by opening 1 Cursor on state and 1 more Cursor on intermediate hashes bucket - we will receive data in
  order of "Preorder trie traversal". Cursors will only do "sequential reads" and "jumps forward" - been hardware-friendly.
