@@ -464,6 +464,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 			sort.Slice(prefix, func(i, j int) bool { return bytes.Compare(prefix[i], prefix[j]) < 0 })
 			unfurl := trie.NewRetainList(0)
 			for j := range prefix {
+				fmt.Printf("excl: %x\n", prefix[j])
 				unfurl.AddKey(prefix[j])
 			}
 

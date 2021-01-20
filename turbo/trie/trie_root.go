@@ -321,8 +321,8 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, prefix []byte, quit <
 }
 
 func collectMissedAccIH(canUse func(prefix []byte) bool, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
-	rangeFrom := []byte{}
-	hasRange := false
+	var rangeFrom []byte
+	var hasRange bool
 	ranges := [][]byte{}
 	var addToRange = func(cur []byte) {
 		if hasRange {
@@ -341,7 +341,6 @@ func collectMissedAccIH(canUse func(prefix []byte) bool, prefix []byte, cache *s
 		ranges = append(ranges, common.CopyBytes(rangeFrom), common.CopyBytes(cur))
 		hasRange = false
 	}
-	addToRange(rangeFrom)
 	if err := walkIHAccounts(canUse, prefix, cache, func(isBranch, canUse bool, cur []byte, hash common.Hash) error {
 		if err := common.Stopped(quit); err != nil {
 			return err
@@ -366,8 +365,6 @@ func collectMissedAccIH(canUse func(prefix []byte) bool, prefix []byte, cache *s
 	}); err != nil {
 		return nil, err
 	}
-	endRange(nil)
-
 	return ranges, nil
 }
 
@@ -388,6 +385,7 @@ func loadAccIHToCache(ih ethdb.Cursor, prefix []byte, ranges [][]byte, cache *sh
 			for i := 0; i < len(newV); i++ {
 				newV[i].SetBytes(v[i*common.HashLength : (i+1)*common.HashLength])
 			}
+			fmt.Printf("set: %x\n", k)
 			cache.SetAccountHashesRead(k, binary.BigEndian.Uint16(v), binary.BigEndian.Uint16(v[2:]), newV)
 		}
 	}
@@ -502,7 +500,7 @@ func walkIHAccounts(canUse func(prefix []byte) bool, prefix []byte, cache *shard
 GotItemFromCache:
 	for ihK != nil { // go to sibling in cache
 		lvl = len(ihK)
-		k[lvl], branch[lvl], child[lvl], id[lvl], maxID[lvl] = ihK, branches, children, int8(bits.TrailingZeros16(branches)), int8(bits.Len16(branches))
+		k[lvl], branch[lvl], child[lvl], id[lvl], maxID[lvl] = ihK, branches, children, int8(bits.TrailingZeros16(branches))-1, int8(bits.Len16(branches))
 
 		if prefix != nil && !bytes.HasPrefix(k[lvl], prefix) {
 			return nil
@@ -510,7 +508,7 @@ GotItemFromCache:
 
 		for ; lvl > 0; lvl-- { // go to parent sibling in mem
 			cur = append(append(cur[:0], k[lvl]...), 0)
-			for ; id[lvl] <= maxID[lvl]; id[lvl]++ { // go to sibling
+			for id[lvl]++; id[lvl] <= maxID[lvl]; id[lvl]++ { // go to sibling
 				if !isChild() {
 					continue
 				}
@@ -522,7 +520,6 @@ GotItemFromCache:
 					}
 					continue
 				}
-
 				if canUse(cur) {
 					if err := walker(true, true, cur, hashes[id[lvl]]); err != nil {
 						return err
@@ -743,6 +740,9 @@ func (l *FlatDBTrieLoader) CalcTrieRootOnCache(db ethdb.Database, prefix []byte,
 
 	if _, _, _, _, ok := cache.GetAccountHash(prefix); !ok { // first warmup
 		if err := ethdb.ForEach(ihAccC, func(k, v []byte) (bool, error) {
+			if len(k) > 2 {
+				return true, nil
+			}
 			newV := make([]common.Hash, len(v[4:])/common.HashLength)
 			for i := 0; i < len(newV); i++ {
 				newV[i].SetBytes(v[i*common.HashLength : (i+1)*common.HashLength])
@@ -832,7 +832,7 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 	hash []byte,
 	cutoff int,
 ) error {
-	//fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
+	fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
 	switch itemType {
 	case StorageStreamItem:
 		if len(r.currAccK) == 0 {
