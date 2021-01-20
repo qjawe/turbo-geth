@@ -220,7 +220,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, prefix []byte, quit <
 	defer logEvery.Stop()
 	defer func(t time.Time) { fmt.Printf("trie_root.go:225: %s\n", time.Since(t)) }(time.Now())
 	i1, i2, i3, i4 := 0, 0, 0, 0
-	for ihK, ihV, err := ih.First(prefix); ; ihK, ihV, err = ih.Next() { // no loop termination is at he end of loop
+	for ihK, ihV, err := ih.AtPrefix(prefix); ; ihK, ihV, err = ih.Next() { // no loop termination is at he end of loop
 		if err != nil {
 			return EmptyRoot, err
 		}
@@ -1156,7 +1156,7 @@ func (c *IHCursor) FirstNotCoveredPrefix() []byte {
 	return c.firstNotCoveredPrefix
 }
 
-func (c *IHCursor) First(prefix []byte) (k, v []byte, err error) {
+func (c *IHCursor) AtPrefix(prefix []byte) (k, v []byte, err error) {
 	c.skipState = false
 	c.prev = append(c.prev[:0], c.cur...)
 	c.prefix = prefix

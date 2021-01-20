@@ -987,7 +987,7 @@ func TestIHCursor(t *testing.T) {
 	rl.AddHex(common.FromHex("030f"))
 	var filter = func(prefix []byte) bool { return !rl.Retain(prefix) }
 	ih := IH(filter, nil, cursor)
-	k, _, _ := ih.First([]byte{})
+	k, _, _ := ih.AtPrefix([]byte{})
 	require.Equal(common.FromHex("0001"), k)
 	require.False(ih.skipState)
 	require.Equal([]byte(nil), ih.FirstNotCoveredPrefix())
