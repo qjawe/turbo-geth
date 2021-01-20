@@ -204,11 +204,12 @@ func (shi *StorageHashItem) HasPrefix(prefix CacheItem) bool {
 }
 
 func (sc *StateCache) SetAccountHashesRead(prefix []byte, branchChildren, children uint16, hashes []common.Hash) {
-	var ai AccountHashItem
-	ai.addrHashPrefix = append(ai.addrHashPrefix[:0], prefix...)
-	ai.branchChildren = branchChildren
-	ai.children = children
-	ai.hashes = hashes
+	ai := AccountHashItem{
+		addrHashPrefix: common.CopyBytes(prefix),
+		branchChildren: branchChildren,
+		children:       children,
+		hashes:         hashes,
+	}
 	sc.setRead(&ai, false /* absent */)
 }
 
@@ -235,7 +236,7 @@ func (sc *StateCache) SetStorageHashRead(addrHash common.Hash, incarnation uint6
 	ai := StorageHashItem{
 		addrHash:       addrHash,
 		incarnation:    incarnation,
-		locHashPrefix:  locHashPrefix,
+		locHashPrefix:  common.CopyBytes(locHashPrefix),
 		branchChildren: branchChildren,
 		children:       children,
 		hashes:         hashes,
