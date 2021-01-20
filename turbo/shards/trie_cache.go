@@ -27,7 +27,6 @@ type AccountHashItem struct {
 	sequence       int
 	queuePos       int
 	flags          uint16
-	bits           int
 	branchChildren uint16
 	children       uint16
 	hashes         []common.Hash // TODO: store it as fixed size flat array?
@@ -48,17 +47,9 @@ func (awi *AccountHashWriteItem) Less(than btree.Item) bool {
 func (ahi *AccountHashItem) Less(than btree.Item) bool {
 	switch i := than.(type) {
 	case *AccountHashItem:
-		c := bytes.Compare(ahi.addrHashPrefix, i.addrHashPrefix)
-		if c != 0 {
-			return c < 0
-		}
-		return ahi.bits < i.bits
+		return bytes.Compare(ahi.addrHashPrefix, i.addrHashPrefix) < 0
 	case *AccountHashWriteItem:
-		c := bytes.Compare(ahi.addrHashPrefix, i.ai.addrHashPrefix)
-		if c != 0 {
-			return c < 0
-		}
-		return ahi.bits < i.ai.bits
+		return bytes.Compare(ahi.addrHashPrefix, i.ai.addrHashPrefix) < 0
 	default:
 		panic(fmt.Sprintf("unexpected type: %T", than))
 	}
@@ -73,7 +64,7 @@ func (ahi *AccountHashItem) HasFlag(flag uint16) bool { return ahi.flags&flag !=
 func (ahi *AccountHashItem) SetFlags(flags uint16)    { ahi.flags |= flags }
 func (ahi *AccountHashItem) ClearFlags(flags uint16)  { ahi.flags &^= flags }
 func (ahi *AccountHashItem) String() string {
-	return fmt.Sprintf("AccountHashItem(addrHashPrefix=%x,bits=%d)", ahi.addrHashPrefix, ahi.bits)
+	return fmt.Sprintf("AccountHashItem(addrHashPrefix=%x,bits=%d)", ahi.addrHashPrefix)
 }
 
 func (ahi *AccountHashItem) CopyValueFrom(item CacheItem) {
@@ -93,7 +84,6 @@ type StorageHashWriteItem struct {
 type StorageHashItem struct {
 	sequence       int
 	queuePos       int
-	bits           int
 	flags          uint16
 	branchChildren uint16
 	children       uint16
@@ -119,11 +109,7 @@ func (shi *StorageHashItem) Less(than btree.Item) bool {
 	if shi.incarnation != i.incarnation {
 		return shi.incarnation < i.incarnation
 	}
-	c = bytes.Compare(shi.locHashPrefix, i.locHashPrefix)
-	if c != 0 {
-		return c < 0
-	}
-	return shi.bits < i.bits
+	return bytes.Compare(shi.locHashPrefix, i.locHashPrefix) < 0
 }
 
 func (shi *StorageHashItem) GetSequence() int         { return shi.sequence }
@@ -135,7 +121,7 @@ func (shi *StorageHashItem) HasFlag(flag uint16) bool { return shi.flags&flag !=
 func (shi *StorageHashItem) SetFlags(flags uint16)    { shi.flags |= flags }
 func (shi *StorageHashItem) ClearFlags(flags uint16)  { shi.flags &^= flags }
 func (shi *StorageHashItem) String() string {
-	return fmt.Sprintf("StorageHashItem(addrHash=%x,incarnation=%d,locHashPrefix=%x,bits=%d)", shi.addrHash, shi.incarnation, shi.locHashPrefix, shi.bits)
+	return fmt.Sprintf("StorageHashItem(addrHash=%x,incarnation=%d,locHashPrefix=%x)", shi.addrHash, shi.incarnation, shi.locHashPrefix)
 }
 
 func (shi *StorageHashItem) CopyValueFrom(item CacheItem) {
@@ -169,32 +155,10 @@ func (uh *UnprocessedHeap) Pop() interface{} {
 	return cacheItem
 }
 
-func bytesandmask(bits int) (bytes int, mask byte) {
-	wholeBytes := (bits+7)/8 - 1
-	shiftbits := bits & 7
-	mask = byte(0xff)
-	if shiftbits != 0 {
-		mask = 0xff << (8 - shiftbits)
-	}
-	return wholeBytes, mask
-}
-
 func (ai *AccountItem) HasPrefix(prefix CacheItem) bool {
 	switch i := prefix.(type) {
 	case *AccountItem:
 		return ai.addrHash == i.addrHash && ai.account.Incarnation == i.account.Incarnation
-	case *StorageItem:
-		return false
-	case *CodeItem:
-		return false
-	case *AccountHashItem:
-		wholeBytes, mask := bytesandmask(i.bits)
-		if !bytes.Equal(ai.addrHash[:wholeBytes], i.addrHashPrefix[:wholeBytes]) {
-			return false
-		}
-		return (ai.addrHash[wholeBytes] & mask) == (i.addrHashPrefix[wholeBytes] & mask)
-	case *StorageHashItem:
-		return false
 	default:
 		panic(fmt.Sprintf("unrecognised type of cache item: %T", prefix))
 	}
@@ -202,27 +166,8 @@ func (ai *AccountItem) HasPrefix(prefix CacheItem) bool {
 
 func (si *StorageItem) HasPrefix(prefix CacheItem) bool {
 	switch i := prefix.(type) {
-	case *AccountItem:
-		return si.addrHash == i.addrHash && si.incarnation == i.account.Incarnation
 	case *StorageItem:
 		return si.addrHash == i.addrHash && si.incarnation == i.incarnation && si.locHash == i.locHash
-	case *CodeItem:
-		return false
-	case *AccountHashItem:
-		wholeBytes, mask := bytesandmask(i.bits)
-		if !bytes.Equal(si.addrHash[:wholeBytes], i.addrHashPrefix[:wholeBytes]) {
-			return false
-		}
-		return (si.addrHash[wholeBytes] & mask) == (i.addrHashPrefix[wholeBytes] & mask)
-	case *StorageHashItem:
-		if si.addrHash != i.addrHash || si.incarnation != i.incarnation {
-			return false
-		}
-		wholeBytes, mask := bytesandmask(i.bits)
-		if !bytes.Equal(si.locHash[:wholeBytes], i.locHashPrefix[:wholeBytes]) {
-			return false
-		}
-		return (si.locHash[wholeBytes] & mask) == (i.locHashPrefix[wholeBytes] & mask)
 	default:
 		panic(fmt.Sprintf("unrecognised type of cache item: %T", prefix))
 	}
@@ -230,20 +175,8 @@ func (si *StorageItem) HasPrefix(prefix CacheItem) bool {
 
 func (ci *CodeItem) HasPrefix(prefix CacheItem) bool {
 	switch i := prefix.(type) {
-	case *AccountItem:
-		return ci.addrHash == i.addrHash && ci.incarnation == i.account.Incarnation
-	case *StorageItem:
-		return false
 	case *CodeItem:
 		return ci.addrHash == i.addrHash && ci.incarnation == i.incarnation
-	case *AccountHashItem:
-		wholeBytes, mask := bytesandmask(i.bits)
-		if !bytes.Equal(ci.addrHash[:wholeBytes], i.addrHashPrefix[:wholeBytes]) {
-			return false
-		}
-		return (ci.addrHash[wholeBytes] & mask) == (i.addrHashPrefix[wholeBytes] & mask)
-	case *StorageHashItem:
-		return false
 	default:
 		panic(fmt.Sprintf("unrecognised type of cache item: %T", prefix))
 	}
@@ -251,23 +184,8 @@ func (ci *CodeItem) HasPrefix(prefix CacheItem) bool {
 
 func (ahi *AccountHashItem) HasPrefix(prefix CacheItem) bool {
 	switch i := prefix.(type) {
-	case *AccountItem:
-		return false
-	case *StorageItem:
-		return false
-	case *CodeItem:
-		return false
 	case *AccountHashItem:
-		if ahi.bits < i.bits {
-			return false
-		}
-		wholeBytes, mask := bytesandmask(i.bits)
-		if !bytes.Equal(ahi.addrHashPrefix[:wholeBytes], i.addrHashPrefix[:wholeBytes]) {
-			return false
-		}
-		return (ahi.addrHashPrefix[wholeBytes] & mask) == (i.addrHashPrefix[wholeBytes] & mask)
-	case *StorageHashItem:
-		return false
+		return bytes.HasPrefix(ahi.addrHashPrefix, i.addrHashPrefix)
 	default:
 		panic(fmt.Sprintf("unrecognised type of cache item: %T", prefix))
 	}
@@ -275,30 +193,11 @@ func (ahi *AccountHashItem) HasPrefix(prefix CacheItem) bool {
 
 func (shi *StorageHashItem) HasPrefix(prefix CacheItem) bool {
 	switch i := prefix.(type) {
-	case *AccountItem:
-		return shi.addrHash == i.addrHash && shi.incarnation == i.account.Incarnation
-	case *StorageItem:
-		return false
-	case *CodeItem:
-		return false
-	case *AccountHashItem:
-		wholeBytes, mask := bytesandmask(i.bits)
-		if !bytes.Equal(shi.addrHash[:wholeBytes], i.addrHashPrefix[:wholeBytes]) {
-			return false
-		}
-		return (shi.addrHash[wholeBytes] & mask) == (i.addrHashPrefix[wholeBytes] & mask)
 	case *StorageHashItem:
 		if shi.addrHash != i.addrHash || shi.incarnation != i.incarnation {
 			return false
 		}
-		if shi.bits < i.bits {
-			return false
-		}
-		wholeBytes, mask := bytesandmask(i.bits)
-		if !bytes.Equal(shi.locHashPrefix[:wholeBytes], i.locHashPrefix[:wholeBytes]) {
-			return false
-		}
-		return (shi.locHashPrefix[wholeBytes] & mask) == (i.locHashPrefix[wholeBytes] & mask)
+		return bytes.HasPrefix(shi.locHashPrefix, i.locHashPrefix)
 	default:
 		panic(fmt.Sprintf("unrecognised type of cache item: %T", prefix))
 	}

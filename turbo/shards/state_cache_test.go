@@ -19,7 +19,7 @@ func TestCacheBtreeOrderAccountStorage2(t *testing.T) {
 	sc.SetAccountRead(a1.Bytes(), &accounts.Account{})
 	sc.SetAccountWrite(a1.Bytes(), &accounts.Account{Incarnation: 2})
 	x, ok := sc.GetAccount(a1.Bytes())
-	fmt.Printf("%+v,%t\n", x, ok)
+	fmt.Printf("%+v,%t\n", x.Incarnation, ok)
 
 }
 
