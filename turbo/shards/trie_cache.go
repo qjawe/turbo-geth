@@ -389,6 +389,64 @@ func (sc *StateCache) AccountHashes(prefix []byte, walker func(prefix []byte, br
 	return nil
 }
 
+func (sc *StateCache) AccountHashes3(canUse func([]byte) bool, prefix []byte, walker func(prefix []byte, h common.Hash, skipState bool) error) error {
+	var cur []byte
+	seek := make([]byte, 0, 64)
+	seek = append(seek, prefix...)
+	var k [64][]byte
+	var branch, child [64]uint16
+	var id, maxID [64]int8
+	var lvl int
+	var ok bool
+	var isChild = func() bool { return (uint16(1)<<id[lvl])&child[lvl] != 0 }
+	var isBranch = func() bool { return (uint16(1)<<id[lvl])&branch[lvl] != 0 }
+	skipState := true
+
+	ihK, branches, children, hashes := sc.AccountHashesSeek(prefix)
+GotItemFromCache:
+	for ihK != nil { // go to sibling in cache
+		lvl = len(ihK)
+		k[lvl], branch[lvl], child[lvl], id[lvl], maxID[lvl] = ihK, branches, children, int8(bits.TrailingZeros16(children))-1, int8(bits.Len16(children))
+
+		if prefix != nil && !bytes.HasPrefix(k[lvl], prefix) {
+			return nil
+		}
+
+		for ; lvl > 0; lvl-- { // go to parent sibling in mem
+			cur = append(append(cur[:0], k[lvl]...), 0)
+			for id[lvl]++; id[lvl] <= maxID[lvl]; id[lvl]++ { // go to sibling
+				if !isChild() {
+					continue
+				}
+
+				cur[len(cur)-1] = uint8(id[lvl])
+				if !isBranch() {
+					skipState = false
+					continue
+				}
+				if canUse(cur) {
+					if err := walker(cur, hashes[id[lvl]], skipState); err != nil {
+						return err
+					}
+					skipState = true
+					continue // cache item can be used and exists in cache, then just go to next sibling
+				}
+
+				ihK, branches, children, _, ok = sc.GetAccountHash(cur)
+				if ok {
+					continue GotItemFromCache
+				}
+				skipState = false
+			}
+		}
+
+		_ = dbutils.NextNibblesSubtree(k[1], &seek)
+		ihK, branches, children, _ = sc.AccountHashesSeek(seek)
+		//fmt.Printf("sibling: %x -> %x, %d, %d, %d\n", seek, ihK, lvl, id[lvl], maxID[lvl])
+	}
+	return nil
+}
+
 // [from:to)
 func (sc *StateCache) AccountHashes2(canUse func([]byte) bool, prefix []byte, walker func(prefix []byte, h common.Hash) error) error {
 	var cur, prev *AccountHashItem

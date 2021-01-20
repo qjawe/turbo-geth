@@ -403,6 +403,7 @@ func loadAccsToCache(accs ethdb.Cursor, ranges [][]byte, cache *shards.StateCach
 		}
 		hexutil.CompressNibbles(from, &from)
 		hexutil.CompressNibbles(to, &to)
+		fmt.Printf("acc: %x,%x\n", from, to)
 		for k, v, err := accs.Seek(from); k != nil; k, v, err = accs.Next() {
 			if err != nil {
 				return nil, err
@@ -453,6 +454,7 @@ func collectMissedAccounts(canUse func(prefix []byte) bool, prefix []byte, cache
 
 		if !isBranch {
 			inCache := cache.HasAccountWithInPrefix(cur)
+			fmt.Printf("in cache: %x, %t\n", cur, inCache)
 			if inCache {
 				endRange(cur)
 			} else {
@@ -462,16 +464,18 @@ func collectMissedAccounts(canUse func(prefix []byte) bool, prefix []byte, cache
 		}
 
 		if canUse {
+			fmt.Printf("can use: %x\n", cur)
 			endRange(cur)
 			return nil
 		}
 
-		inCache := cache.HasAccountWithInPrefix(cur)
-		if inCache {
-			endRange(cur)
-		} else {
-			addToRange(cur)
-		}
+		//inCache := cache.HasAccountWithInPrefix(cur)
+		//fmt.Printf("in cache2: %x, %t\n", cur, inCache)
+		//if inCache {
+		//	endRange(cur)
+		//} else {
+		//	addToRange(cur)
+		//}
 		return nil
 	}); err != nil {
 		return nil, err
@@ -495,7 +499,7 @@ func walkIHAccounts(canUse func(prefix []byte) bool, prefix []byte, cache *shard
 GotItemFromCache:
 	for ihK != nil { // go to sibling in cache
 		lvl = len(ihK)
-		k[lvl], branch[lvl], child[lvl], id[lvl], maxID[lvl] = ihK, branches, children, int8(bits.TrailingZeros16(branches))-1, int8(bits.Len16(branches))
+		k[lvl], branch[lvl], child[lvl], id[lvl], maxID[lvl] = ihK, branches, children, int8(bits.TrailingZeros16(children))-1, int8(bits.Len16(children))
 
 		if prefix != nil && !bytes.HasPrefix(k[lvl], prefix) {
 			return nil
@@ -590,9 +594,10 @@ func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, prefix []byte, cac
 	defer func(t time.Time) { fmt.Printf("trie_root.go:375: %s\n", time.Since(t)) }(time.Now())
 	canUse := func(prefix []byte) bool { return !l.rd.Retain(prefix) }
 	i1, i2, i3, i4 := 0, 0, 0, 0
-	if err := cache.AccountHashes2(canUse, prefix, func(ihK []byte, ihV common.Hash) error {
+	if err := cache.AccountHashes3(canUse, prefix, func(ihK []byte, ihV common.Hash, skipState bool) error {
 		i1++
-		if isDenseSequence(prevIHK, ihK) {
+		fmt.Printf("ihhh: %x,%x,%t\n", prevIHK, ihK, skipState)
+		if skipState {
 			goto SkipAccounts
 		}
 
@@ -605,9 +610,6 @@ func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, prefix []byte, cac
 			l.accSeek = append(l.accSeek, 0)
 		}
 		hexutil.CompressNibbles(l.accSeek, &l.accSeek)
-		if len(prevIHK) > 0 && len(l.accSeek) == 0 {
-			return nil
-		}
 		if err := cache.WalkAccounts(l.accSeek, func(addrHash common.Hash, acc *accounts.Account) (bool, error) {
 			if err := common.Stopped(quit); err != nil {
 				return false, err
@@ -664,7 +666,10 @@ func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, prefix []byte, cac
 				if err := l.receiver.Receive(SHashStreamItem, l.accAddrHashWithInc[:], ihKS, nil, nil, h.Bytes(), 0); err != nil {
 					return err
 				}
-				prevIHKS = ihKS
+				if len(ihKS) == 0 { // means we just sent acc.storageRoot
+					return nil
+				}
+				prevIHKS = append(prevIHKS[:0], ihKS...)
 				return nil
 			}); err != nil {
 				return false, err
@@ -688,7 +693,7 @@ func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, prefix []byte, cac
 		if err := l.receiver.Receive(AHashStreamItem, ihK, nil, nil, nil, ihV[:], 0); err != nil {
 			return err
 		}
-		prevIHK = ihK
+		prevIHK = append(prevIHK[:0], ihK...)
 		return nil
 	}); err != nil {
 		return EmptyRoot, err
