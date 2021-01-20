@@ -335,9 +335,6 @@ func collectMissedAccIH(canUse func(prefix []byte) bool, prefix []byte, cache *s
 		if !hasRange {
 			return
 		}
-		//if isDenseSequence(rangeFrom, cur) {
-		//	return
-		//}
 		ranges = append(ranges, common.CopyBytes(rangeFrom), common.CopyBytes(cur))
 		hasRange = false
 	}
@@ -385,7 +382,6 @@ func loadAccIHToCache(ih ethdb.Cursor, prefix []byte, ranges [][]byte, cache *sh
 			for i := 0; i < len(newV); i++ {
 				newV[i].SetBytes(v[i*common.HashLength : (i+1)*common.HashLength])
 			}
-			fmt.Printf("set: %x\n", k)
 			cache.SetAccountHashesRead(k, binary.BigEndian.Uint16(v), binary.BigEndian.Uint16(v[2:]), newV)
 		}
 	}
@@ -433,7 +429,9 @@ func loadAccsToCache(accs ethdb.Cursor, ranges [][]byte, cache *shards.StateCach
 }
 
 func collectMissedAccounts(canUse func(prefix []byte) bool, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
-	rangeFrom, ranges, hasRange := []byte{}, [][]byte{}, false
+	var rangeFrom []byte
+	var hasRange bool
+	ranges := [][]byte{}
 	var addToRange = func(cur []byte) {
 		if hasRange {
 			return
@@ -448,7 +446,6 @@ func collectMissedAccounts(canUse func(prefix []byte) bool, prefix []byte, cache
 		ranges = append(ranges, common.CopyBytes(rangeFrom), common.CopyBytes(cur))
 		hasRange = false
 	}
-	addToRange(rangeFrom)
 	if err := walkIHAccounts(canUse, prefix, cache, func(isBranch, canUse bool, cur []byte, hash common.Hash) error {
 		if err := common.Stopped(quit); err != nil {
 			return err
@@ -479,8 +476,6 @@ func collectMissedAccounts(canUse func(prefix []byte) bool, prefix []byte, cache
 	}); err != nil {
 		return nil, err
 	}
-	endRange(nil)
-
 	return ranges, nil
 }
 
