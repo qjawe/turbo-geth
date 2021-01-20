@@ -216,7 +216,6 @@ var Buckets = []string{
 	StorageHistoryBucket,
 	CodeBucket,
 	ContractCodeBucket,
-	IntermediateTrieHashBucket,
 	DatabaseVerisionKey,
 	HeaderPrefix,
 	HeaderNumberPrefix,
