@@ -390,6 +390,21 @@ func (sc *StateCache) WalkAccountHashes(walker func(prefix []byte, branchChildre
 	return nil
 }
 
+func (sc *StateCache) AccountHashCount() int {
+	var key AccountSeek
+	return sc.readWrites[id(key)].Len()
+}
+
+func (sc *StateCache) HasAccountHashWithPrefix(addrHashPrefix []byte) bool {
+	seek := &AccountHashItem{addrHashPrefix: addrHashPrefix}
+	var found bool
+	sc.readWrites[id(seek)].AscendGreaterOrEqual(seek, func(i btree.Item) bool {
+		found = bytes.HasPrefix(i.(*AccountHashItem).addrHashPrefix, addrHashPrefix)
+		return false
+	})
+	return false
+}
+
 func (sc *StateCache) GetAccountHash(prefix []byte) ([]byte, uint16, uint16, []common.Hash, bool) {
 	var key AccountHashItem
 	key.addrHashPrefix = prefix

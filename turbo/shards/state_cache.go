@@ -433,15 +433,12 @@ func (sc *StateCache) GetAccount(address []byte) (*accounts.Account, bool) {
 func (sc *StateCache) HasAccountWithInPrefix(addrHashPrefix []byte) bool {
 	AccRead.Inc(1)
 	seek := &AccountSeek{seek: addrHashPrefix}
-	var found *AccountItem
+	var found bool
 	sc.readWrites[id(seek)].AscendGreaterOrEqual(seek, func(i btree.Item) bool {
-		found = i.(*AccountItem) // found
+		found = bytes.HasPrefix(i.(*AccountItem).addrHash.Bytes(), addrHashPrefix)
 		return false
 	})
-	if found == nil {
-		return false
-	}
-	return bytes.HasPrefix(found.addrHash.Bytes(), addrHashPrefix)
+	return found
 }
 
 // GetDeletedAccount attempts to retrieve the last version of account before it was deleted
