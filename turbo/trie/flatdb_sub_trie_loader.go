@@ -159,7 +159,7 @@ func (fstl *FlatDbSubTrieLoader) iteration(c ethdb.Cursor, ih *IHCursor2, first 
 	var minKey []byte
 	var err error
 	if !first {
-		isIH, minKey = keyIsBeforeOrEqual(fstl.ihK, fstl.k)
+		isIH, minKey = keyIsBeforeOrEqualDeprecated(fstl.ihK, fstl.k)
 	}
 	fixedbytes := fstl.fixedbytes[fstl.rangeIdx]
 	cutoff := fstl.cutoffs[fstl.rangeIdx]
@@ -227,7 +227,7 @@ func (fstl *FlatDbSubTrieLoader) iteration(c ethdb.Cursor, ih *IHCursor2, first 
 				}
 			}
 
-			isIH, minKey = keyIsBeforeOrEqual(fstl.ihK, fstl.k)
+			isIH, minKey = keyIsBeforeOrEqualDeprecated(fstl.ihK, fstl.k)
 			if fixedbytes == 0 {
 				cmp = 0
 			}

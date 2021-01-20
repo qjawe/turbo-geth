@@ -500,7 +500,7 @@ func loadAccIHToCache(ih ethdb.Cursor, prefix []byte, ranges [][]byte, cache *sh
 			if err != nil {
 				return err
 			}
-			if keyIsBefore(to, k) || !bytes.HasPrefix(k, prefix) { // read all accounts until next IH
+			if keyIsBeforeOrEqual(to, k) || !bytes.HasPrefix(k, prefix) { // read all accounts until next IH
 				break
 			}
 			newV := make([]common.Hash, len(v[4:])/common.HashLength)
@@ -514,23 +514,22 @@ func loadAccIHToCache(ih ethdb.Cursor, prefix []byte, ranges [][]byte, cache *sh
 }
 
 func loadAccsToCache(accs ethdb.Cursor, ranges [][]byte, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
-	var seek, to []byte
 	var storageIHRanges [][]byte
 	for i := 0; i < len(ranges)/2; i++ {
 		if err := common.Stopped(quit); err != nil {
 			return nil, err
 		}
-		p1 := ranges[i*2]
-		if len(p1)%2 == 1 {
-			p1 = append(p1, 0)
+		from := ranges[i*2]
+		if len(from)%2 == 1 {
+			from = append(from, 0)
 		}
-		hexutil.CompressNibbles(p1, &seek)
-		p2 := ranges[i*2+1]
-		if len(p2)%2 == 1 {
-			p2 = append(p2, 0)
+		hexutil.CompressNibbles(from, &from)
+		to := ranges[i*2+1]
+		if len(to)%2 == 1 {
+			to = append(to, 0)
 		}
-		hexutil.CompressNibbles(p2, &to)
-		for k, v, err := accs.Seek(seek); k != nil; k, v, err = accs.Next() {
+		hexutil.CompressNibbles(to, &to)
+		for k, v, err := accs.Seek(from); k != nil; k, v, err = accs.Next() {
 			if err != nil {
 				return nil, err
 			}
@@ -1905,7 +1904,18 @@ func nextAccountHex(in, out []byte) bool {
 }
 
 // keyIsBefore - kind of bytes.Compare, but nil is the last key. And return
-func keyIsBeforeOrEqual(k1, k2 []byte) (bool, []byte) {
+func keyIsBeforeOrEqual(k1, k2 []byte) bool {
+	if k1 == nil {
+		return false
+	}
+
+	if k2 == nil {
+		return true
+	}
+	return bytes.Compare(k1, k2) <= 0
+}
+
+func keyIsBeforeOrEqualDeprecated(k1, k2 []byte) (bool, []byte) {
 	if k1 == nil {
 		return false, k2
 	}
@@ -1931,13 +1941,7 @@ func keyIsBefore(k1, k2 []byte) bool {
 	if k2 == nil {
 		return true
 	}
-
-	switch bytes.Compare(k1, k2) {
-	case -1:
-		return true
-	default:
-		return false
-	}
+	return bytes.Compare(k1, k2) < 0
 }
 
 func tmpMakeIHPrefix(addrHash common.Hash, incarnation uint64, prefix []byte, branchChild uint8, buf []byte) []byte {
