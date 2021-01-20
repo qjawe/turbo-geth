@@ -320,7 +320,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, prefix []byte, quit <
 	return l.receiver.Root(), nil
 }
 
-func collectMissedAccHashPrefixes2(canUse func(prefix []byte) bool, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
+func collectMissedAccIH(canUse func(prefix []byte) bool, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
 	rangeFrom := []byte{}
 	hasRange := false
 	ranges := [][]byte{}
@@ -368,125 +368,6 @@ func collectMissedAccHashPrefixes2(canUse func(prefix []byte) bool, prefix []byt
 	}
 	endRange(nil)
 
-	return ranges, nil
-}
-
-func collectMissedAccHashPrefixes(canUse func(prefix []byte) bool, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
-	var cur []byte
-	prev := common.CopyBytes(prefix)
-	seek := make([]byte, 0, 256)
-	seek = append(seek, prefix...)
-	ranges := [][]byte{}
-	var k [64][]byte
-	var branch [64]uint16
-	var id, maxID [64]int8
-	var lvl int
-	var ok bool
-	ihK, branches, _, _ := cache.AccountHashesSeek(prefix)
-	//fmt.Printf("sibling: %x -> %x\n", seek, ihK)
-
-GotItemFromCache:
-	for { // go to sibling in cache
-		if ihK == nil {
-			ranges = append(ranges, common.CopyBytes(prev), nil)
-			break
-		}
-		lvl = len(ihK)
-		k[lvl], branch[lvl], id[lvl], maxID[lvl] = ihK, branches, int8(bits.TrailingZeros16(branches)), int8(bits.Len16(branches))
-
-		if err := common.Stopped(quit); err != nil {
-			return nil, err
-		}
-		if prefix != nil && !bytes.HasPrefix(k[lvl], prefix) {
-			return nil, nil
-		}
-
-		for ; lvl > 0; lvl-- { // go to parent sibling in mem
-			cur = append(append(cur[:0], k[lvl]...), 0)
-			//fmt.Printf("iteration: %x, %b, %d, %d\n", k[lvl], branch[lvl], id[lvl], maxID[lvl])
-			for ; id[lvl] <= maxID[lvl]; id[lvl]++ { // go to sibling
-				if (uint16(1)<<id[lvl])&branch[lvl] == 0 {
-					continue
-				}
-
-				cur[len(cur)-1] = uint8(id[lvl])
-				//fmt.Printf("check: %x->%t\n", cur, canUse(cur))
-				if canUse(cur) {
-					prev = append(prev[:0], cur...)
-					continue // cache item can be used and exists in cache, then just go to next sibling
-				}
-				ihK, branches, _, _, ok = cache.GetAccountHash(cur)
-				//fmt.Printf("child: %x -> %t\n", cur, ok)
-				if ok {
-					continue GotItemFromCache
-				}
-				ranges = append(ranges, common.CopyBytes(cur))
-			}
-		}
-
-		_ = dbutils.NextNibblesSubtree(k[1], &seek)
-		ihK, branches, _, _ = cache.AccountHashesSeek(seek)
-		//fmt.Printf("sibling: %x -> %x, %d, %d, %d\n", seek, ihK, lvl, id[lvl], maxID[lvl])
-	}
-	fmt.Printf("ranges: %d\n", len(ranges)/2)
-	return ranges, nil
-}
-
-func collectStHashRangesToLoad(canUse func(prefix []byte) bool, accHash common.Hash, incarnation uint64, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
-	var cur []byte
-	prev := []byte{}
-	seek := make([]byte, 0, 256)
-	ranges := [][]byte{}
-	var k [64][]byte
-	var branch [64]uint16
-	var id, maxID [64]int8
-	var lvl int
-	var ok bool
-	var isBranch = func() bool { return (uint16(1)<<id[lvl])&branch[lvl] != 0 }
-	ihK, branches, _, _ := cache.StorageHashesSeek(accHash, incarnation, []byte{})
-	//fmt.Printf("sibling: %x -> %x\n", seek, ihK)
-
-GotItemFromCache:
-	for { // go to sibling in cache
-		if ihK == nil {
-			ranges = append(ranges, common.CopyBytes(prev), nil)
-			break
-		}
-		lvl = len(ihK)
-		k[lvl], branch[lvl], id[lvl], maxID[lvl] = ihK, branches, int8(bits.TrailingZeros16(branches)), int8(bits.Len16(branches))
-
-		if err := common.Stopped(quit); err != nil {
-			return nil, err
-		}
-
-		for ; lvl > 0; lvl-- { // go to parent sibling in mem
-			cur = append(append(cur[:0], k[lvl]...), 0)
-			//fmt.Printf("iteration: %x, %b, %d, %d\n", k[lvl], branch[lvl], id[lvl], maxID[lvl])
-			for ; id[lvl] <= maxID[lvl]; id[lvl]++ { // go to sibling
-				if !isBranch() {
-					continue
-				}
-
-				cur[len(cur)-1] = uint8(id[lvl])
-				//fmt.Printf("check: %x->%t\n", cur, canUse(cur))
-				if canUse(cur) {
-					prev = append(prev[:0], cur...)
-					continue // cache item can be used and exists in cache, then just go to next sibling
-				}
-				ihK, branches, _, _, ok = cache.GetStorageHash(accHash, incarnation, cur)
-				//fmt.Printf("child: %x -> %t\n", cur, ok)
-				if ok {
-					continue GotItemFromCache
-				}
-				ranges = append(ranges, common.CopyBytes(prev), common.CopyBytes(cur))
-			}
-		}
-
-		_ = dbutils.NextNibblesSubtree(k[1], &seek)
-		ihK, branches, _, _ = cache.StorageHashesSeek(accHash, incarnation, seek)
-		//fmt.Printf("sibling: %x -> %x, %d, %d, %d\n", seek, ihK, lvl, id[lvl], maxID[lvl])
-	}
-	fmt.Printf("ranges: %d\n", len(ranges)/2)
 	return ranges, nil
 }
 
@@ -554,107 +435,7 @@ func loadAccsToCache(accs ethdb.Cursor, ranges [][]byte, cache *shards.StateCach
 }
 
 func collectMissedAccounts(canUse func(prefix []byte) bool, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
-	var cur []byte
-	rangeFirstPrefix := []byte{}
-	rangeIsInProgress := false
-	seek := make([]byte, 0, 256)
-	seek = append(seek, prefix...)
-	ranges := [][]byte{}
-	var k [64][]byte
-	var branch, child [64]uint16
-	var id, maxID [64]int8
-	var lvl int
-	var ok bool
-	var isChild = func() bool { return (uint16(1)<<id[lvl])&child[lvl] != 0 }
-	var isBranch = func() bool { return (uint16(1)<<id[lvl])&branch[lvl] != 0 }
-	var addToRange = func(cur []byte) {
-		if rangeIsInProgress {
-			return
-		}
-		rangeFirstPrefix = append(rangeFirstPrefix[:0], cur...)
-		rangeIsInProgress = true
-	}
-	var endRange = func(cur []byte) {
-		if !rangeIsInProgress {
-			return
-		}
-		if isDenseSequence(rangeFirstPrefix, cur) {
-			return
-		}
-		rangeFirstPrefix = append(rangeFirstPrefix[:0], cur...)
-		rangeIsInProgress = true
-	}
-	addToRange(rangeFirstPrefix)
-	ihK, branches, children, _ := cache.AccountHashesSeek(prefix)
-
-	//fmt.Printf("sibling: %x -> %x\n", seek, ihK)
-GotItemFromCache:
-	for { // go to sibling in cache
-		if ihK == nil {
-			endRange(nil)
-			break
-		}
-		lvl = len(ihK)
-		k[lvl], branch[lvl], child[lvl], id[lvl], maxID[lvl] = ihK, branches, children, int8(bits.TrailingZeros16(branches)), int8(bits.Len16(branches))
-
-		if err := common.Stopped(quit); err != nil {
-			return nil, err
-		}
-		if prefix != nil && !bytes.HasPrefix(k[lvl], prefix) {
-			return nil, nil
-		}
-
-		for ; lvl > 0; lvl-- { // go to parent sibling in mem
-			cur = append(append(cur[:0], k[lvl]...), 0)
-			//fmt.Printf("iteration: %x, %b, %d, %d\n", k[lvl], branch[lvl], id[lvl], maxID[lvl])
-			for ; id[lvl] <= maxID[lvl]; id[lvl]++ { // go to sibling
-				if !isChild() {
-					continue
-				}
-
-				cur[len(cur)-1] = uint8(id[lvl])
-				if !isBranch() {
-					inCache := cache.HasAccountWithInPrefix(cur)
-					if inCache {
-						endRange(cur)
-					} else {
-						addToRange(cur)
-					}
-					continue
-				}
-
-				//fmt.Printf("check: %x->%t\n", cur, canUse(cur))
-				if canUse(cur) {
-					endRange(cur)
-					continue // cache item can be used and exists in cache, then just go to next sibling
-				}
-
-				ihK, branches, children, _, ok = cache.GetAccountHash(cur)
-				//fmt.Printf("child: %x -> %t\n", cur, ok)
-				if ok {
-					continue GotItemFromCache
-				}
-				inCache := cache.HasAccountWithInPrefix(cur)
-				if inCache {
-					endRange(cur)
-				} else {
-					addToRange(cur)
-				}
-			}
-		}
-
-		_ = dbutils.NextNibblesSubtree(k[1], &seek)
-		ihK, branches, children, _ = cache.AccountHashesSeek(seek)
-		//fmt.Printf("sibling: %x -> %x, %d, %d, %d\n", seek, ihK, lvl, id[lvl], maxID[lvl])
-	}
-
-	return ranges, nil
-}
-
-func collectMissedAccounts2(canUse func(prefix []byte) bool, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
-	rangeFrom := []byte{}
-	hasRange := false
-	ranges := [][]byte{}
+	rangeFrom, ranges, hasRange := []byte{}, [][]byte{}, false
 	var addToRange = func(cur []byte) {
 		if hasRange {
 			return
@@ -666,9 +447,6 @@ func collectMissedAccounts2(canUse func(prefix []byte) bool, prefix []byte, cach
 		if !hasRange {
 			return
 		}
-		//if isDenseSequence(rangeFrom, cur) {
-		//	return
-		//}
 		ranges = append(ranges, common.CopyBytes(rangeFrom), common.CopyBytes(cur))
 		hasRange = false
 	}
@@ -710,7 +488,7 @@ func collectMissedAccounts2(canUse func(prefix []byte) bool, prefix []byte, cach
 
 func walkIHAccounts(canUse func(prefix []byte) bool, prefix []byte, cache *shards.StateCache, walker func(isBranch, canUse bool, cur []byte, hash common.Hash) error) error {
 	var cur []byte
-	seek := make([]byte, 0, 256)
+	seek := make([]byte, 0, 64)
 	seek = append(seek, prefix...)
 	var k [64][]byte
 	var branch, child [64]uint16
@@ -719,9 +497,8 @@ func walkIHAccounts(canUse func(prefix []byte) bool, prefix []byte, cache *shard
 	var ok bool
 	var isChild = func() bool { return (uint16(1)<<id[lvl])&child[lvl] != 0 }
 	var isBranch = func() bool { return (uint16(1)<<id[lvl])&branch[lvl] != 0 }
-	ihK, branches, children, hashes := cache.AccountHashesSeek(prefix)
 
-	//fmt.Printf("sibling: %x -> %x\n", seek, ihK)
+	ihK, branches, children, hashes := cache.AccountHashesSeek(prefix)
 GotItemFromCache:
 	for ihK != nil { // go to sibling in cache
 		lvl = len(ihK)
@@ -774,7 +551,7 @@ GotItemFromCache:
 func (l *FlatDBTrieLoader) prep(accs, ihAcc ethdb.Cursor, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) error {
 	defer func(t time.Time) { fmt.Printf("trie_root.go:338: %s\n", time.Since(t)) }(time.Now())
 	canUse := func(prefix []byte) bool { return !l.rd.Retain(prefix) }
-	accIHPrefixes, err := collectMissedAccHashPrefixes2(canUse, prefix, cache, quit)
+	accIHPrefixes, err := collectMissedAccIH(canUse, prefix, cache, quit)
 	if err != nil {
 		return err
 	}
@@ -782,7 +559,7 @@ func (l *FlatDBTrieLoader) prep(accs, ihAcc ethdb.Cursor, prefix []byte, cache *
 	if err != nil {
 		return err
 	}
-	accPrefixes, err := collectMissedAccounts2(canUse, prefix, cache, quit)
+	accPrefixes, err := collectMissedAccounts(canUse, prefix, cache, quit)
 	if err != nil {
 		return err
 	}
