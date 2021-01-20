@@ -1908,7 +1908,6 @@ func keyIsBeforeOrEqual(k1, k2 []byte) bool {
 	if k1 == nil {
 		return false
 	}
-
 	if k2 == nil {
 		return true
 	}
@@ -1937,7 +1936,6 @@ func keyIsBefore(k1, k2 []byte) bool {
 	if k1 == nil {
 		return false
 	}
-
 	if k2 == nil {
 		return true
 	}
