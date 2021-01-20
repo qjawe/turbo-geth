@@ -596,7 +596,6 @@ func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, prefix []byte, cac
 	i1, i2, i3, i4 := 0, 0, 0, 0
 	if err := cache.AccountHashes3(canUse, prefix, func(ihK []byte, ihV common.Hash, skipState bool) error {
 		i1++
-		fmt.Printf("ihhh: %x,%x,%t\n", prevIHK, ihK, skipState)
 		if skipState {
 			goto SkipAccounts
 		}
