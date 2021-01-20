@@ -454,7 +454,6 @@ func collectMissedAccounts(canUse func(prefix []byte) bool, prefix []byte, cache
 
 		if !isBranch {
 			inCache := cache.HasAccountWithInPrefix(cur)
-			fmt.Printf("in cache: %x, %t\n", cur, inCache)
 			if inCache {
 				endRange(cur)
 			} else {
@@ -464,7 +463,6 @@ func collectMissedAccounts(canUse func(prefix []byte) bool, prefix []byte, cache
 		}
 
 		if canUse {
-			fmt.Printf("can use: %x\n", cur)
 			endRange(cur)
 			return nil
 		}
