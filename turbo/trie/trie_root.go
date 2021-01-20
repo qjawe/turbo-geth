@@ -491,11 +491,11 @@ GotItemFromCache:
 }
 
 func loadAccIHToCache(ih ethdb.Cursor, prefix []byte, ranges [][]byte, cache *shards.StateCache, quit <-chan struct{}) error {
-	for i := 0; i < len(ranges)/2; i++ {
+	for j := 0; j < len(ranges)/2; j++ {
 		if err := common.Stopped(quit); err != nil {
 			return err
 		}
-		from, to := ranges[i*2], ranges[i*2+1]
+		from, to := ranges[j*2], ranges[j*2+1]
 		for k, v, err := ih.Seek(from); k != nil; k, v, err = ih.Next() {
 			if err != nil {
 				return err
@@ -515,19 +515,18 @@ func loadAccIHToCache(ih ethdb.Cursor, prefix []byte, ranges [][]byte, cache *sh
 
 func loadAccsToCache(accs ethdb.Cursor, ranges [][]byte, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
 	var storageIHRanges [][]byte
-	for i := 0; i < len(ranges)/2; i++ {
+	for i := 0; i < len(ranges)/2; i += 2 {
 		if err := common.Stopped(quit); err != nil {
 			return nil, err
 		}
-		from := ranges[i*2]
+		from, to := ranges[i], ranges[i+1]
 		if len(from)%2 == 1 {
 			from = append(from, 0)
 		}
-		hexutil.CompressNibbles(from, &from)
-		to := ranges[i*2+1]
 		if len(to)%2 == 1 {
 			to = append(to, 0)
 		}
+		hexutil.CompressNibbles(from, &from)
 		hexutil.CompressNibbles(to, &to)
 		for k, v, err := accs.Seek(from); k != nil; k, v, err = accs.Next() {
 			if err != nil {

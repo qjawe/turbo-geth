@@ -178,7 +178,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 			"root hash", hash.Hex(),
 			"gen IH", generationIHTook,
 		)
-		_ = cache.DebugPrintAccounts()
+		//_ = cache.DebugPrintAccounts()
 		writes := cache.PrepareWrites()
 
 		shards.WalkAccountHashesWrites(writes, func(prefix []byte, branchChildren, children uint16, h []common.Hash) {

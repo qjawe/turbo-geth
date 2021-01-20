@@ -429,6 +429,7 @@ func (sc *StateCache) GetStorageHash(addrHash common.Hash, incarnation uint64, p
 	}
 	return nil, 0, 0, nil, false
 }
+
 func (sc *StateCache) DebugPrintAccounts() error {
 	var cur *AccountHashItem
 	id := id(cur)
@@ -646,7 +647,6 @@ func WalkAccountHashesWrites(writes [5]*btree.BTree, update func(prefix []byte, 
 	id := id(&AccountHashWriteItem{})
 	writes[id].Ascend(func(i btree.Item) bool {
 		it := i.(*AccountHashWriteItem)
-		fmt.Printf("234234234: %x\n", it.ai.addrHashPrefix)
 		if it.ai.HasFlag(AbsentFlag) || it.ai.HasFlag(DeletedFlag) {
 			del(it.ai.addrHashPrefix, it.ai.branchChildren, it.ai.children, it.ai.hashes)
 			return true
