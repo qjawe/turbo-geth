@@ -402,7 +402,7 @@ func (sc *StateCache) HasAccountHashWithPrefix(addrHashPrefix []byte) bool {
 		found = bytes.HasPrefix(i.(*AccountHashItem).addrHashPrefix, addrHashPrefix)
 		return false
 	})
-	return false
+	return found
 }
 
 func (sc *StateCache) GetAccountHash(prefix []byte) ([]byte, uint16, uint16, []common.Hash, bool) {

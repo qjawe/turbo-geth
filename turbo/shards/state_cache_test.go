@@ -2,6 +2,7 @@ package shards
 
 import (
 	"bytes"
+	"fmt"
 	"testing"
 
 	"github.com/c2h5oh/datasize"
@@ -10,6 +11,17 @@ import (
 	"github.com/stretchr/testify/assert"
 	"golang.org/x/crypto/sha3"
 )
+
+func TestCacheBtreeOrderAccountStorage2(t *testing.T) {
+	sc := NewStateCache(32, datasize.ByteSize(128*accountItemSize))
+	var a1 common.Address
+	a1[0] = 1
+	sc.SetAccountRead(a1.Bytes(), &accounts.Account{})
+	sc.SetAccountWrite(a1.Bytes(), &accounts.Account{Incarnation: 2})
+	x, ok := sc.GetAccount(a1.Bytes())
+	fmt.Printf("%+v,%t\n", x, ok)
+
+}
 
 func TestCacheBtreeOrderAccountStorage(t *testing.T) {
 	sc := NewStateCache(32, datasize.ByteSize(128*accountItemSize))
