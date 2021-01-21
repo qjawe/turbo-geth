@@ -567,31 +567,20 @@ func (l *FlatDBTrieLoader) prep(accs, ihAcc ethdb.Cursor, prefix []byte, cache *
 
 func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) (common.Hash, error) {
 	var prevIHK []byte
-	//ihKSBuf := make([]byte, 256)
-	firstNotCoveredPrefix := make([]byte, 0, 128)
-	//lastPart := make([]byte, 0, 128)
-
 	logEvery := time.NewTicker(30 * time.Second)
 	defer logEvery.Stop()
 	l.accSeek = make([]byte, 64)
 	defer func(t time.Time) { fmt.Printf("trie_root.go:375: %s\n", time.Since(t)) }(time.Now())
 	canUse := func(prefix []byte) bool { return !l.rd.Retain(prefix) }
 	i1, i2, i3, i4 := 0, 0, 0, 0
+
 	if err := cache.AccountHashes3(canUse, prefix, func(ihK []byte, ihV common.Hash, skipState bool) error {
 		i1++
 		if skipState {
 			goto SkipAccounts
 		}
 
-		if prevIHK == nil {
-			l.accSeek = common.CopyBytes(prefix)
-		} else {
-			_ = dbutils.NextNibblesSubtree(prevIHK, &l.accSeek)
-		}
-		if len(l.accSeek)%2 == 1 {
-			l.accSeek = append(l.accSeek, 0)
-		}
-		hexutil.CompressNibbles(l.accSeek, &l.accSeek)
+		l.accSeek = firstNotCoveredPrefix(prevIHK, prefix, l.accSeek)
 		if err := cache.WalkAccounts(l.accSeek, func(addrHash common.Hash, acc *accounts.Account) (bool, error) {
 			if err := common.Stopped(quit); err != nil {
 				return false, err
@@ -618,14 +607,7 @@ func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, prefix []byte, cac
 					goto SkipStorage
 				}
 
-				_ = dbutils.NextNibblesSubtree(prevIHKS, &firstNotCoveredPrefix)
-				if len(firstNotCoveredPrefix)%2 == 1 {
-					firstNotCoveredPrefix = append(firstNotCoveredPrefix, 0)
-				}
-				hexutil.CompressNibbles(firstNotCoveredPrefix, &l.storageSeek)
-				if len(l.storageSeek) == 0 {
-					l.storageSeek = []byte{0}
-				}
+				l.storageSeek = firstNotCoveredPrefix(prevIHK, prefix, l.storageSeek)
 				for kS, vS, err3 := storages.SeekBothRange(l.accAddrHashWithInc[:], l.storageSeek); kS != nil; kS, vS, err3 = storages.NextDup() {
 					if err3 != nil {
 						return err3
@@ -1099,15 +1081,7 @@ func IH(canUse func(prefix []byte) bool, hc HashCollector2, c ethdb.Cursor) *IHC
 }
 
 func (c *IHCursor) FirstNotCoveredPrefix() []byte {
-	if len(c.prev) > 0 {
-		_ = dbutils.NextNibblesSubtree(c.prev, &c.firstNotCoveredPrefix)
-	} else {
-		c.firstNotCoveredPrefix = append(c.firstNotCoveredPrefix[:0], c.seek...)
-	}
-	if len(c.firstNotCoveredPrefix)%2 == 1 {
-		c.firstNotCoveredPrefix = append(c.firstNotCoveredPrefix, 0)
-	}
-	hexutil.CompressNibbles(c.firstNotCoveredPrefix, &c.firstNotCoveredPrefix)
+	c.firstNotCoveredPrefix = firstNotCoveredPrefix(c.prev, c.seek, c.firstNotCoveredPrefix)
 	return c.firstNotCoveredPrefix
 }
 
@@ -1342,14 +1316,7 @@ func (c *StorageIHCursor) PrevKey() []byte {
 }
 
 func (c *StorageIHCursor) FirstNotCoveredPrefix() []byte {
-	_ = dbutils.NextNibblesSubtree(c.prev, &c.firstNotCoveredPrefix)
-	if len(c.firstNotCoveredPrefix) == 0 {
-		c.firstNotCoveredPrefix = append(c.firstNotCoveredPrefix, 0, 0)
-	}
-	if len(c.firstNotCoveredPrefix)%2 == 1 {
-		c.firstNotCoveredPrefix = append(c.firstNotCoveredPrefix, 0)
-	}
-	hexutil.CompressNibbles(c.firstNotCoveredPrefix, &c.firstNotCoveredPrefix)
+	c.firstNotCoveredPrefix = firstNotCoveredPrefix(c.prev, []byte{0, 0}, c.firstNotCoveredPrefix)
 	return c.firstNotCoveredPrefix
 }
 
@@ -1604,6 +1571,19 @@ func isDenseSequence(prev []byte, next []byte) bool {
 }
 
 var isSequenceBuf = make([]byte, 256)
+
+func firstNotCoveredPrefix(prev, prefix, buf []byte) []byte {
+	if len(prev) > 0 {
+		_ = dbutils.NextNibblesSubtree(prev, &buf)
+	} else {
+		buf = append(buf[:0], prefix...)
+	}
+	if len(buf)%2 == 1 {
+		buf = append(buf, 0)
+	}
+	hexutil.CompressNibbles(buf, &buf)
+	return buf
+}
 
 type StateCursor struct {
 	c    ethdb.Cursor
