@@ -25,12 +25,12 @@ on each level of trie calculates intermediate hash of underlying data.
 **Practically:** It can be implemented as "Preorder trie traversal" (Preorder - visit Root, visit Left, visit Right).
 But, let's make couple observations to make traversal over huge state efficient.
 
-**Observation 1:** `IntermediateHashOfAccountBucket` already stores state keys in sorted way.
+**Observation 1:** `TrieOfAccountsBucket` already stores state keys in sorted way.
 Iteration over this bucket will retrieve keys in same order as "Preorder trie traversal".
 
 **Observation 2:** each Eth block - changes not big part of state - it means most of Merkle trie intermediate hashes will not change.
-It means we effectively can cache them. `IntermediateHashOfAccountBucket` stores "Intermediate hashes of all Merkle trie levels".
-It also sorted and Iteration over `IntermediateHashOfAccountBucket` will retrieve keys in same order as "Preorder trie traversal".
+It means we effectively can cache them. `TrieOfAccountsBucket` stores "Intermediate hashes of all Merkle trie levels".
+It also sorted and Iteration over `TrieOfAccountsBucket` will retrieve keys in same order as "Preorder trie traversal".
 
 **Implementation:** by opening 1 Cursor on state and 1 more Cursor on intermediate hashes bucket - we will receive data in
  order of "Preorder trie traversal". Cursors will only do "sequential reads" and "jumps forward" - been hardware-friendly.
@@ -207,7 +207,7 @@ func (l *FlatDBTrieLoader) CalcTrieRoot(db ethdb.Database, prefix []byte, quit <
 	}
 
 	accs, storages := NewStateCursor(tx.Cursor(dbutils.HashedAccountsBucket)), NewStateCursor(tx.Cursor(dbutils.HashedStorageBucket))
-	ihAccC, ihStorageC := tx.Cursor(dbutils.IntermediateHashOfAccountBucket), tx.CursorDupSort(dbutils.IntermediateHashOfStorageBucket)
+	ihAccC, ihStorageC := tx.Cursor(dbutils.TrieOfAccountsBucket), tx.CursorDupSort(dbutils.TrieOfStorageBucket)
 
 	var canUse = func(prefix []byte) bool { return !l.rd.Retain(prefix) }
 	ih := IH(canUse, l.hc, ihAccC)
@@ -378,14 +378,61 @@ func loadAccIHToCache(ih ethdb.Cursor, prefix []byte, ranges [][]byte, cache *sh
 			if keyIsBeforeOrEqual(to, k) || !bytes.HasPrefix(k, prefix) { // read all accounts until next IH
 				break
 			}
-			newV := make([]common.Hash, len(v[4:])/common.HashLength)
-			for i := 0; i < len(newV); i++ {
-				newV[i].SetBytes(v[i*common.HashLength : (i+1)*common.HashLength])
-			}
-			cache.SetAccountHashesRead(k, binary.BigEndian.Uint16(v), binary.BigEndian.Uint16(v[2:]), newV)
+			branches, children, newV := UnmarshalIH(v)
+			cache.SetAccountHashesRead(k, branches, children, newV)
 		}
 	}
 	return nil
+}
+
+func UnmarshalIH(v []byte) (uint16, uint16, []common.Hash) {
+	branches, children := binary.BigEndian.Uint16(v), binary.BigEndian.Uint16(v[2:])
+	v = v[4:]
+	newV := make([]common.Hash, len(v[4:])/common.HashLength)
+	for i := 0; i < len(newV); i++ {
+		newV[i].SetBytes(v[i*common.HashLength : (i+1)*common.HashLength])
+	}
+	return branches, children, newV
+}
+
+func MarshalIH(branchChildren, children uint16, h []common.Hash) []byte {
+	v := make([]byte, len(h)*common.HashLength+4)
+	binary.BigEndian.PutUint16(v, branchChildren)
+	binary.BigEndian.PutUint16(v[2:], children)
+	for i := 0; i < len(h); i++ {
+		copy(v[4+i*common.HashLength:4+(i+1)*common.HashLength], h[i].Bytes())
+	}
+	return v
+}
+
+func IHStorageKey(addressHash []byte, incarnation uint64, prefix []byte) []byte {
+	return dbutils.GenerateCompositeStoragePrefix(addressHash, incarnation, prefix)
+}
+
+func CollectIH(children, branchChildren uint16, hashes []byte, rootHash []byte, buf []byte) {
+	buf = buf[:len(hashes)+len(rootHash)+4]
+	binary.BigEndian.PutUint16(buf, branchChildren)
+	binary.BigEndian.PutUint16(buf[2:], children)
+	if len(rootHash) == 0 {
+		copy(buf[4:], hashes)
+	} else {
+		copy(buf[4:], rootHash)
+		copy(buf[36:], hashes)
+	}
+}
+
+func TypedIH(hashes []byte, rootHash []byte) []common.Hash {
+	to := make([]common.Hash, len(hashes)/common.HashLength+len(rootHash)/common.HashLength)
+	i := 0
+	if len(rootHash) > 0 {
+		to[0].SetBytes(rootHash)
+		i++
+	}
+	for j := 0; j < len(hashes); j++ {
+		to[i].SetBytes(hashes[j*common.HashLength : (j+1)*common.HashLength])
+		i++
+	}
+	return to
 }
 
 func loadAccsToCache(accs ethdb.Cursor, ranges [][]byte, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
@@ -487,17 +534,19 @@ func walkIHAccounts(canUse func(prefix []byte) bool, prefix []byte, cache *shard
 	seek = append(seek, prefix...)
 	var k [64][]byte
 	var branch, child [64]uint16
-	var id, maxID [64]int8
+	var id, maxID, hashID [64]int8
+	var hashes [64][]common.Hash
 	var lvl int
 	var ok bool
 	var isChild = func() bool { return (uint16(1)<<id[lvl])&child[lvl] != 0 }
 	var isBranch = func() bool { return (uint16(1)<<id[lvl])&branch[lvl] != 0 }
 
-	ihK, branches, children, hashes := cache.AccountHashesSeek(prefix)
+	ihK, branches, children, hashItem := cache.AccountHashesSeek(prefix)
 GotItemFromCache:
 	for ihK != nil { // go to sibling in cache
 		lvl = len(ihK)
-		k[lvl], branch[lvl], child[lvl], id[lvl], maxID[lvl] = ihK, branches, children, int8(bits.TrailingZeros16(children))-1, int8(bits.Len16(children))
+		k[lvl], branch[lvl], child[lvl], hashes[lvl] = ihK, branches, children, hashItem
+		hashID[lvl], id[lvl], maxID[lvl] = -1, int8(bits.TrailingZeros16(children))-1, int8(bits.Len16(children))
 
 		if prefix != nil && !bytes.HasPrefix(k[lvl], prefix) {
 			return nil
@@ -512,19 +561,20 @@ GotItemFromCache:
 
 				cur[len(cur)-1] = uint8(id[lvl])
 				if !isBranch() {
-					if err := walker(false, false, cur, hashes[id[lvl]]); err != nil {
+					if err := walker(false, false, cur, hashes[lvl][hashID[lvl]]); err != nil {
 						return err
 					}
 					continue
 				}
+				hashID[lvl]++
 				if canUse(cur) {
-					if err := walker(true, true, cur, hashes[id[lvl]]); err != nil {
+					if err := walker(true, true, cur, hashes[lvl][hashID[lvl]]); err != nil {
 						return err
 					}
 					continue // cache item can be used and exists in cache, then just go to next sibling
 				}
 
-				if err := walker(true, false, cur, hashes[id[lvl]]); err != nil {
+				if err := walker(true, false, cur, hashes[lvl][hashID[lvl]]); err != nil {
 					return err
 				}
 
@@ -536,7 +586,7 @@ GotItemFromCache:
 		}
 
 		_ = dbutils.NextNibblesSubtree(k[1], &seek)
-		ihK, branches, children, _ = cache.AccountHashesSeek(seek)
+		ihK, branches, children, hashItem = cache.AccountHashesSeek(seek)
 		//fmt.Printf("sibling: %x -> %x, %d, %d, %d\n", seek, ihK, lvl, id[lvl], maxID[lvl])
 	}
 	return nil
@@ -729,7 +779,7 @@ func (l *FlatDBTrieLoader) CalcTrieRootOnCache(db ethdb.Database, prefix []byte,
 
 	accsC, stC := tx.Cursor(dbutils.HashedAccountsBucket), tx.Cursor(dbutils.HashedStorageBucket)
 	//accs, storages := NewStateCursor(tx.Cursor(dbutils.HashedAccountsBucket)), NewStateCursor(tx.Cursor(dbutils.HashedStorageBucket))
-	ihAccC, ihStorageC := tx.Cursor(dbutils.IntermediateHashOfAccountBucket), tx.Cursor(dbutils.IntermediateHashOfStorageBucket)
+	ihAccC, ihStorageC := tx.Cursor(dbutils.TrieOfAccountsBucket), tx.Cursor(dbutils.TrieOfStorageBucket)
 	ss := tx.CursorDupSort(dbutils.HashedStorageBucket)
 	//_ = storages
 	_ = ihStorageC
@@ -740,11 +790,8 @@ func (l *FlatDBTrieLoader) CalcTrieRootOnCache(db ethdb.Database, prefix []byte,
 			if len(k) > 2 {
 				return true, nil
 			}
-			newV := make([]common.Hash, len(v[4:])/common.HashLength)
-			for i := 0; i < len(newV); i++ {
-				newV[i].SetBytes(v[i*common.HashLength : (i+1)*common.HashLength])
-			}
-			cache.SetAccountHashesRead(k, binary.BigEndian.Uint16(v), binary.BigEndian.Uint16(v[2:]), newV)
+			branches, children, newV := UnmarshalIH(v)
+			cache.SetAccountHashesRead(k, branches, children, newV)
 			return true, nil
 		}); err != nil {
 			return EmptyRoot, err

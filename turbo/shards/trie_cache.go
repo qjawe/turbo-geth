@@ -395,18 +395,20 @@ func (sc *StateCache) AccountHashes3(canUse func([]byte) bool, prefix []byte, wa
 	seek = append(seek, prefix...)
 	var k [64][]byte
 	var branch, child [64]uint16
-	var id, maxID [64]int8
+	var id, hashID, maxID [64]int8
+	var hashes [64][]common.Hash
 	var lvl int
 	var ok bool
 	var isChild = func() bool { return (uint16(1)<<id[lvl])&child[lvl] != 0 }
 	var isBranch = func() bool { return (uint16(1)<<id[lvl])&branch[lvl] != 0 }
 	skipState := true
 
-	ihK, branches, children, hashes := sc.AccountHashesSeek(prefix)
+	ihK, branches, children, hashItem := sc.AccountHashesSeek(prefix)
 GotItemFromCache:
 	for ihK != nil { // go to sibling in cache
 		lvl = len(ihK)
-		k[lvl], branch[lvl], child[lvl], id[lvl], maxID[lvl] = ihK, branches, children, int8(bits.TrailingZeros16(children))-1, int8(bits.Len16(children))
+		k[lvl], branch[lvl], child[lvl], hashes[lvl] = ihK, branches, children, hashItem
+		hashID[lvl], id[lvl], maxID[lvl] = -1, int8(bits.TrailingZeros16(children))-1, int8(bits.Len16(children))
 
 		if prefix != nil && !bytes.HasPrefix(k[lvl], prefix) {
 			return nil
@@ -424,15 +426,17 @@ GotItemFromCache:
 					skipState = false
 					continue
 				}
+				hashID[lvl]++
 				if canUse(cur) {
-					if err := walker(cur, hashes[id[lvl]], skipState); err != nil {
+					fmt.Printf("%x, %x\n", cur, hashes[lvl])
+					if err := walker(cur, hashes[lvl][hashID[lvl]], skipState); err != nil {
 						return err
 					}
 					skipState = true
 					continue // cache item can be used and exists in cache, then just go to next sibling
 				}
 
-				ihK, branches, children, _, ok = sc.GetAccountHash(cur)
+				ihK, branches, children, hashItem, ok = sc.GetAccountHash(cur)
 				if ok {
 					continue GotItemFromCache
 				}
@@ -497,62 +501,6 @@ func (sc *StateCache) AccountHashes2(canUse func([]byte) bool, prefix []byte, wa
 	if err := walker(nil, common.Hash{}); err != nil {
 		return err
 	}
-	return nil
-}
-
-func (sc *StateCache) AccountHashesTree(canUse func([]byte) bool, prefix []byte, walker func(prefix []byte, h common.Hash) error) error {
-	var cur, prev []byte
-	seek := make([]byte, 0, 256)
-	seek = append(seek, prefix...)
-	var k [64][]byte
-	var branch [64]uint16
-	var hashes [64][]common.Hash
-	var id, hashID, maxID [64]int8
-	var lvl int
-	var ok bool
-	ihK, branches, _, hashesItem := sc.AccountHashesSeek(prefix)
-	//fmt.Printf("sibling: %x -> %x\n", seek, ihK)
-
-GotItemFromCache:
-	for ihK != nil { // go to sibling in cache
-		lvl = len(ihK)
-		k[lvl], branch[lvl], id[lvl], maxID[lvl], hashes[lvl] = ihK, branches, int8(bits.TrailingZeros16(branches))-1, int8(bits.Len16(branches)), hashesItem
-
-		if prefix != nil && !bytes.HasPrefix(k[lvl], prefix) {
-			return nil
-		}
-
-		for ; lvl > 0; lvl-- { // go to parent sibling in mem
-			cur = append(append(cur[:0], k[lvl]...), 0)
-			//fmt.Printf("iteration: %x, %b, %d, %d\n", k[lvl], branch[lvl], id[lvl], maxID[lvl])
-			for id[lvl]++; id[lvl] <= maxID[lvl]; id[lvl]++ { // go to sibling
-				if (uint16(1)<<id[lvl])&branch[lvl] == 0 {
-					continue
-				}
-				hashID[lvl]++
-
-				cur[len(cur)-1] = uint8(id[lvl])
-				//fmt.Printf("check: %x->%t\n", cur, canUse(cur))
-				if canUse(cur) {
-					prev = append(prev[:0], cur...)
-					if err := walker(k[lvl], hashes[lvl][hashID[lvl]]); err != nil {
-						return err
-					}
-					continue // cache item can be used and exists in cache, then just go to next sibling
-				}
-				ihK, branches, _, hashesItem, ok = sc.GetAccountHash(cur)
-				if ok {
-					continue GotItemFromCache
-				}
-				// todo
-			}
-		}
-
-		_ = dbutils.NextNibblesSubtree(k[1], &seek)
-		ihK, branches, _, _ = sc.AccountHashesSeek(seek)
-		//fmt.Printf("sibling: %x -> %x, %d, %d, %d\n", seek, ihK, lvl, id[lvl], maxID[lvl])
-	}
-
 	return nil
 }
 

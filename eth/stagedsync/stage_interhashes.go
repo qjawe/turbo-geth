@@ -84,7 +84,7 @@ func SpawnIntermediateHashesStage(s *StageState, db ethdb.Database, checkRoot bo
 func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot bool, cache *shards.StateCache, tmpdir string, expectedRootHash common.Hash, quit <-chan struct{}) error {
 	log.Info(fmt.Sprintf("[%s] Regeneration intermediate hashes started", logPrefix))
 	// Clear IH bucket
-	c := db.(ethdb.HasTx).Tx().Cursor(dbutils.IntermediateHashOfAccountBucket)
+	c := db.(ethdb.HasTx).Tx().Cursor(dbutils.TrieOfAccountsBucket)
 	for k, _, err := c.First(); k != nil; k, _, err = c.First() {
 		if err != nil {
 			return err
@@ -94,7 +94,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 		}
 	}
 	c.Close()
-	c = db.(ethdb.HasTx).Tx().Cursor(dbutils.IntermediateHashOfStorageBucket)
+	c = db.(ethdb.HasTx).Tx().Cursor(dbutils.TrieOfStorageBucket)
 	for k, _, err := c.First(); k != nil; k, _, err = c.First() {
 		if err != nil {
 			return err
@@ -108,8 +108,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 	if cache != nil {
 		for i := 0; i < 16; i++ {
 			unfurl := trie.NewRetainList(0)
-			newV := make([]common.Hash, 0, 17)
-			hashCollector := func(keyHex []byte, set uint16, branchSet uint16, hashes []byte, rootHash []byte) error {
+			hashCollector := func(keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error {
 				if len(keyHex) == 0 {
 					return nil
 				}
@@ -117,34 +116,18 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 					cache.SetAccountHashDelete(keyHex)
 					return nil
 				}
-				newV = newV[:len(hashes)/common.HashLength+len(rootHash)/common.HashLength]
-				copyTo := newV
-				if len(rootHash) > 0 {
-					newV[0].SetBytes(rootHash)
-					copyTo = newV[0:]
-				}
-				for j := 0; j < len(copyTo); j++ {
-					copyTo[j].SetBytes(hashes[j*common.HashLength : (j+1)*common.HashLength])
-				}
-				cache.SetAccountHashWrite(keyHex, branchSet, set, newV)
+				newV := trie.TypedIH(hashes, rootHash)
+				cache.SetAccountHashWrite(keyHex, branches, children, newV)
 				return nil
 			}
-			storageHashCollector := func(accWithInc []byte, keyHex []byte, set uint16, branchSet uint16, hashes []byte, rootHash []byte) error {
+			storageHashCollector := func(accWithInc []byte, keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error {
 				addr, inc := common.BytesToHash(accWithInc[:32]), binary.BigEndian.Uint64(accWithInc[32:])
 				if hashes == nil {
-					cache.SetStorageHashDelete(addr, inc, keyHex, branchSet, set, nil)
+					cache.SetStorageHashDelete(addr, inc, keyHex, branches, children, nil)
 					return nil
 				}
-				newV = newV[:len(hashes)/common.HashLength+len(rootHash)/common.HashLength]
-				copyTo := newV
-				if len(rootHash) > 0 {
-					newV[0].SetBytes(rootHash)
-					copyTo = newV[0:]
-				}
-				for j := 0; j < len(copyTo); j++ {
-					copyTo[j].SetBytes(hashes[j*common.HashLength : (j+1)*common.HashLength])
-				}
-				cache.SetStorageHashWrite(addr, inc, keyHex, branchSet, set, newV)
+				newV := trie.TypedIH(hashes, rootHash)
+				cache.SetStorageHashWrite(addr, inc, keyHex, branches, children, newV)
 				return nil
 			}
 			loader := trie.NewFlatDBTrieLoader(logPrefix)
@@ -181,35 +164,24 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 		//_ = cache.DebugPrintAccounts()
 		writes := cache.PrepareWrites()
 
-		shards.WalkAccountHashesWrites(writes, func(prefix []byte, branchChildren, children uint16, h []common.Hash) {
-			newV := make([]byte, len(h)*common.HashLength+4)
-			binary.BigEndian.PutUint16(newV, branchChildren)
-			binary.BigEndian.PutUint16(newV[2:], children)
-			for i := 0; i < len(h); i++ {
-				copy(newV[4+i*common.HashLength:4+(i+1)*common.HashLength], h[i].Bytes())
-			}
-			if err := db.Put(dbutils.IntermediateHashOfAccountBucket, prefix, newV); err != nil {
+		shards.WalkAccountHashesWrites(writes, func(prefix []byte, branches, children uint16, h []common.Hash) {
+			newV := trie.MarshalIH(branches, children, h)
+			if err := db.Put(dbutils.TrieOfAccountsBucket, prefix, newV); err != nil {
 				panic(err)
 			}
-		}, func(prefix []byte, branchChildren, children uint16, h []common.Hash) {
-			if err := db.Delete(dbutils.IntermediateHashOfAccountBucket, prefix, nil); err != nil {
+		}, func(prefix []byte, branches, children uint16, h []common.Hash) {
+			if err := db.Delete(dbutils.TrieOfAccountsBucket, prefix, nil); err != nil {
 				panic(err)
 			}
 		})
-		shards.WalkStorageHashesWrites(writes, func(addrHash common.Hash, incarnation uint64, prefix []byte, branchChildren, children uint16, h []common.Hash) {
-			newV := make([]byte, len(h)*common.HashLength+4)
-			binary.BigEndian.PutUint16(newV, branchChildren)
-			binary.BigEndian.PutUint16(newV[2:], children)
-			for i := 0; i < len(h); i++ {
-				copy(newV[4+i*common.HashLength:4+(i+1)*common.HashLength], h[i].Bytes())
-			}
-			newK := dbutils.GenerateCompositeStoragePrefix(addrHash.Bytes(), incarnation, prefix)
-			if err := db.Put(dbutils.IntermediateHashOfStorageBucket, newK, newV); err != nil {
+		shards.WalkStorageHashesWrites(writes, func(addrHash common.Hash, incarnation uint64, prefix []byte, branches, children uint16, h []common.Hash) {
+			k, v := trie.IHStorageKey(addrHash.Bytes(), incarnation, prefix), trie.MarshalIH(branches, children, h)
+			if err := db.Put(dbutils.TrieOfStorageBucket, k, v); err != nil {
 				panic(err)
 			}
-		}, func(addrHash common.Hash, incarnation uint64, prefix []byte, branchChildren, children uint16, h []common.Hash) {
-			newK := dbutils.GenerateCompositeStoragePrefix(addrHash.Bytes(), incarnation, prefix)
-			if err := db.Delete(dbutils.IntermediateHashOfStorageBucket, newK, nil); err != nil {
+		}, func(addrHash common.Hash, incarnation uint64, prefix []byte, branches, children uint16, h []common.Hash) {
+			k := trie.IHStorageKey(addrHash.Bytes(), incarnation, prefix)
+			if err := db.Delete(dbutils.TrieOfStorageBucket, k, nil); err != nil {
 				panic(err)
 			}
 		})
@@ -226,15 +198,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 				//fmt.Printf("collect del: %x\n", keyHex)
 				return accountIHCollector.Collect(keyHex, nil)
 			}
-			newV = newV[:len(hashes)+len(rootHash)+4]
-			binary.BigEndian.PutUint16(newV, branchSet)
-			binary.BigEndian.PutUint16(newV[2:], set)
-			if len(rootHash) == 0 {
-				copy(newV[4:], hashes)
-			} else {
-				copy(newV[4:], rootHash)
-				copy(newV[36:], hashes)
-			}
+			trie.CollectIH(set, branchSet, hashes, rootHash, newV)
 			//fmt.Printf("collect write: %x, %016b\n", keyHex, branchSet)
 			return accountIHCollector.Collect(keyHex, newV)
 		}
@@ -244,15 +208,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 			if hashes == nil {
 				return storageIHCollector.Collect(newK, nil)
 			}
-			newV = newV[:len(hashes)+len(rootHash)+4]
-			binary.BigEndian.PutUint16(newV, branchSet)
-			binary.BigEndian.PutUint16(newV[2:], set)
-			if len(rootHash) == 0 {
-				copy(newV[4:], hashes)
-			} else {
-				copy(newV[4:], rootHash)
-				copy(newV[36:], hashes)
-			}
+			trie.CollectIH(set, branchSet, hashes, rootHash, newV)
 			//fmt.Printf("collect st write: %x, %016b\n", newK, branchSet)
 			return storageIHCollector.Collect(newK, newV)
 		}
@@ -274,7 +230,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 			"gen IH", generationIHTook,
 		)
 		if err := accountIHCollector.Load(logPrefix, db,
-			dbutils.IntermediateHashOfAccountBucket,
+			dbutils.TrieOfAccountsBucket,
 			etl.IdentityLoadFunc,
 			etl.TransformArgs{
 				Quit: quit,
@@ -283,7 +239,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 			return err
 		}
 		if err := storageIHCollector.Load(logPrefix, db,
-			dbutils.IntermediateHashOfStorageBucket,
+			dbutils.TrieOfStorageBucket,
 			etl.IdentityLoadFunc,
 			etl.TransformArgs{
 				Quit: quit,
@@ -381,8 +337,8 @@ func (p *HashPromoter) Promote(logPrefix string, s *StageState, from, to uint64,
 	if !storage { // delete Intermediate hashes of deleted accounts
 		for kS := range deletedAccounts {
 			k := []byte(kS)
-			if err := p.db.Walk(dbutils.IntermediateHashOfStorageBucket, k, 8*len(k), func(k, v []byte) (bool, error) {
-				return true, p.db.Delete(dbutils.IntermediateHashOfStorageBucket, k, v)
+			if err := p.db.Walk(dbutils.TrieOfStorageBucket, k, 8*len(k), func(k, v []byte) (bool, error) {
+				return true, p.db.Delete(dbutils.TrieOfStorageBucket, k, v)
 			}); err != nil {
 				return err
 			}
@@ -468,8 +424,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 				unfurl.AddKey(prefix[j])
 			}
 
-			newV := make([]common.Hash, 0, 17)
-			hashCollector := func(keyHex []byte, set uint16, branchSet uint16, hashes []byte, rootHash []byte) error {
+			hashCollector := func(keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error {
 				if len(keyHex) == 0 {
 					return nil
 				}
@@ -477,34 +432,18 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 					cache.SetAccountHashDelete(keyHex)
 					return nil
 				}
-				newV = newV[:len(hashes)/common.HashLength+len(rootHash)/common.HashLength]
-				copyTo := newV
-				if len(rootHash) > 0 {
-					newV[0].SetBytes(rootHash)
-					copyTo = newV[0:]
-				}
-				for j := 0; j < len(copyTo); j++ {
-					copyTo[j].SetBytes(hashes[j*common.HashLength : (j+1)*common.HashLength])
-				}
-				cache.SetAccountHashWrite(keyHex, branchSet, set, newV)
+				newV := trie.TypedIH(hashes, rootHash)
+				cache.SetAccountHashWrite(keyHex, branches, children, newV)
 				return nil
 			}
-			storageHashCollector := func(accWithInc []byte, keyHex []byte, set uint16, branchSet uint16, hashes []byte, rootHash []byte) error {
+			storageHashCollector := func(accWithInc []byte, keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error {
 				addr, inc := common.BytesToHash(accWithInc[:32]), binary.BigEndian.Uint64(accWithInc[32:])
 				if hashes == nil {
-					cache.SetStorageHashDelete(addr, inc, keyHex, branchSet, set, nil)
+					cache.SetStorageHashDelete(addr, inc, keyHex, branches, children, nil)
 					return nil
 				}
-				newV = newV[:len(hashes)/common.HashLength+len(rootHash)/common.HashLength]
-				copyTo := newV
-				if len(rootHash) > 0 {
-					newV[0].SetBytes(rootHash)
-					copyTo = newV[0:]
-				}
-				for j := 0; j < len(copyTo); j++ {
-					copyTo[j].SetBytes(hashes[j*common.HashLength : (j+1)*common.HashLength])
-				}
-				cache.SetStorageHashWrite(addr, inc, keyHex, branchSet, set, newV)
+				newV := trie.TypedIH(hashes, rootHash)
+				cache.SetStorageHashWrite(addr, inc, keyHex, branches, children, newV)
 				return nil
 			}
 			// hashCollector in the line below will collect deletes
@@ -519,9 +458,9 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 		}
 
 		loader := trie.NewFlatDBTrieLoader(logPrefix)
-		if err := loader.Reset(trie.NewRetainList(0), func(keyHex []byte, set uint16, branchSet uint16, hashes []byte, rootHash []byte) error {
+		if err := loader.Reset(trie.NewRetainList(0), func(keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error {
 			return nil
-		}, func(accWithInc []byte, keyHex []byte, set uint16, branchSet uint16, hashes []byte, rootHash []byte) error {
+		}, func(accWithInc []byte, keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error {
 			return nil
 		}, false); err != nil {
 			return err
@@ -541,35 +480,24 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 		)
 
 		writes := cache.PrepareWrites()
-		shards.WalkAccountHashesWrites(writes, func(prefix []byte, branchChildren, children uint16, h []common.Hash) {
-			newV := make([]byte, len(h)*common.HashLength+4)
-			binary.BigEndian.PutUint16(newV, branchChildren)
-			binary.BigEndian.PutUint16(newV[2:], children)
-			for i := 0; i < len(h); i++ {
-				copy(newV[4+i*common.HashLength:4+(i+1)*common.HashLength], h[i].Bytes())
-			}
-			if err := db.Put(dbutils.IntermediateHashOfAccountBucket, prefix, newV); err != nil {
+		shards.WalkAccountHashesWrites(writes, func(prefix []byte, branches, children uint16, h []common.Hash) {
+			newV := trie.MarshalIH(branches, children, h)
+			if err := db.Put(dbutils.TrieOfAccountsBucket, prefix, newV); err != nil {
 				panic(err)
 			}
-		}, func(prefix []byte, branchChildren, children uint16, h []common.Hash) {
-			if err := db.Delete(dbutils.IntermediateHashOfAccountBucket, prefix, nil); err != nil {
+		}, func(prefix []byte, branches, children uint16, h []common.Hash) {
+			if err := db.Delete(dbutils.TrieOfAccountsBucket, prefix, nil); err != nil {
 				panic(err)
 			}
 		})
-		shards.WalkStorageHashesWrites(writes, func(addrHash common.Hash, incarnation uint64, prefix []byte, branchChildren, children uint16, h []common.Hash) {
-			newV := make([]byte, len(h)*common.HashLength+4)
-			binary.BigEndian.PutUint16(newV, branchChildren)
-			binary.BigEndian.PutUint16(newV[2:], children)
-			for i := 0; i < len(h); i++ {
-				copy(newV[4+i*common.HashLength:4+(i+1)*common.HashLength], h[i].Bytes())
-			}
-			newK := dbutils.GenerateCompositeStoragePrefix(addrHash.Bytes(), incarnation, prefix)
-			if err := db.Put(dbutils.IntermediateHashOfStorageBucket, newK, newV); err != nil {
+		shards.WalkStorageHashesWrites(writes, func(addrHash common.Hash, incarnation uint64, prefix []byte, branches, children uint16, h []common.Hash) {
+			k, v := trie.IHStorageKey(addrHash.Bytes(), incarnation, prefix), trie.MarshalIH(branches, children, h)
+			if err := db.Put(dbutils.TrieOfStorageBucket, k, v); err != nil {
 				panic(err)
 			}
-		}, func(addrHash common.Hash, incarnation uint64, prefix []byte, branchChildren, children uint16, h []common.Hash) {
-			newK := dbutils.GenerateCompositeStoragePrefix(addrHash.Bytes(), incarnation, prefix)
-			if err := db.Delete(dbutils.IntermediateHashOfStorageBucket, newK, nil); err != nil {
+		}, func(addrHash common.Hash, incarnation uint64, prefix []byte, branches, children uint16, h []common.Hash) {
+			k := trie.IHStorageKey(addrHash.Bytes(), incarnation, prefix)
+			if err := db.Delete(dbutils.TrieOfStorageBucket, k, nil); err != nil {
 				panic(err)
 			}
 		})
@@ -594,15 +522,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 				//fmt.Printf("collect del: %x\n", keyHex)
 				return accountIHCollector.Collect(keyHex, nil)
 			}
-			newV = newV[:len(hashes)+len(rootHash)+4]
-			binary.BigEndian.PutUint16(newV, branchSet)
-			binary.BigEndian.PutUint16(newV[2:], set)
-			if len(rootHash) == 0 {
-				copy(newV[4:], hashes)
-			} else {
-				copy(newV[4:], rootHash)
-				copy(newV[36:], hashes)
-			}
+			trie.CollectIH(set, branchSet, hashes, rootHash, newV)
 			//fmt.Printf("collect write: %x, %016b\n", keyHex, branchSet)
 			return accountIHCollector.Collect(keyHex, newV)
 		}
@@ -612,15 +532,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 			if hashes == nil {
 				return storageIHCollector.Collect(newK, nil)
 			}
-			newV = newV[:len(hashes)+len(rootHash)+4]
-			binary.BigEndian.PutUint16(newV, branchSet)
-			binary.BigEndian.PutUint16(newV[2:], set)
-			if len(rootHash) == 0 {
-				copy(newV[4:], hashes)
-			} else {
-				copy(newV[4:], rootHash)
-				copy(newV[36:], hashes)
-			}
+			trie.CollectIH(set, branchSet, hashes, rootHash, newV)
 			return storageIHCollector.Collect(newK, newV)
 		}
 		// hashCollector in the line below will collect deletes
@@ -642,7 +554,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 			"gen IH", generationIHTook,
 		)
 		if err := accountIHCollector.Load(logPrefix, db,
-			dbutils.IntermediateHashOfAccountBucket,
+			dbutils.TrieOfAccountsBucket,
 			etl.IdentityLoadFunc,
 			etl.TransformArgs{
 				Quit: quit,
@@ -651,7 +563,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 			return err
 		}
 		if err := storageIHCollector.Load(logPrefix, db,
-			dbutils.IntermediateHashOfStorageBucket,
+			dbutils.TrieOfStorageBucket,
 			etl.IdentityLoadFunc,
 			etl.TransformArgs{
 				Quit: quit,
@@ -730,8 +642,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 				unfurl.AddKey(prefix[i])
 			}
 
-			newV := make([]common.Hash, 0, 17)
-			hashCollector := func(keyHex []byte, set uint16, branchSet uint16, hashes []byte, rootHash []byte) error {
+			hashCollector := func(keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error {
 				if len(keyHex) == 0 {
 					return nil
 				}
@@ -739,34 +650,16 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 					cache.SetAccountHashDelete(keyHex)
 					return nil
 				}
-				newV = newV[:len(hashes)/common.HashLength+len(rootHash)/common.HashLength]
-				copyTo := newV
-				if len(rootHash) > 0 {
-					newV[0].SetBytes(rootHash)
-					copyTo = newV[0:]
-				}
-				for j := 0; j < len(copyTo); j++ {
-					copyTo[j].SetBytes(hashes[j*common.HashLength : (j+1)*common.HashLength])
-				}
-				cache.SetAccountHashWrite(keyHex, branchSet, set, newV)
+				cache.SetAccountHashWrite(keyHex, branches, children, trie.TypedIH(hashes, rootHash))
 				return nil
 			}
-			storageHashCollector := func(accWithInc []byte, keyHex []byte, set uint16, branchSet uint16, hashes []byte, rootHash []byte) error {
+			storageHashCollector := func(accWithInc []byte, keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error {
 				addr, inc := common.BytesToHash(accWithInc[:32]), binary.BigEndian.Uint64(accWithInc[32:])
 				if hashes == nil {
-					cache.SetStorageHashDelete(addr, inc, keyHex, branchSet, set, nil)
+					cache.SetStorageHashDelete(addr, inc, keyHex, branches, children, nil)
 					return nil
 				}
-				newV = newV[:len(hashes)/common.HashLength+len(rootHash)/common.HashLength]
-				copyTo := newV
-				if len(rootHash) > 0 {
-					newV[0].SetBytes(rootHash)
-					copyTo = newV[0:]
-				}
-				for j := 0; j < len(copyTo); j++ {
-					copyTo[j].SetBytes(hashes[j*common.HashLength : (j+1)*common.HashLength])
-				}
-				cache.SetStorageHashWrite(addr, inc, keyHex, branchSet, set, newV)
+				cache.SetStorageHashWrite(addr, inc, keyHex, branches, children, trie.TypedIH(hashes, rootHash))
 				return nil
 			}
 			loader := trie.NewFlatDBTrieLoader(logPrefix)
@@ -803,35 +696,24 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 		)
 
 		writes := cache.PrepareWrites()
-		shards.WalkAccountHashesWrites(writes, func(prefix []byte, branchChildren, children uint16, h []common.Hash) {
-			newV := make([]byte, len(h)*common.HashLength+4)
-			binary.BigEndian.PutUint16(newV, branchChildren)
-			binary.BigEndian.PutUint16(newV[2:], children)
-			for i := 0; i < len(h); i++ {
-				copy(newV[4+i*common.HashLength:4+(i+1)*common.HashLength], h[i].Bytes())
-			}
-			if err := db.Put(dbutils.IntermediateHashOfAccountBucket, prefix, newV); err != nil {
+		shards.WalkAccountHashesWrites(writes, func(prefix []byte, branches, children uint16, h []common.Hash) {
+			newV := trie.MarshalIH(branches, children, h)
+			if err := db.Put(dbutils.TrieOfAccountsBucket, prefix, newV); err != nil {
 				panic(err)
 			}
-		}, func(prefix []byte, branchChildren, children uint16, h []common.Hash) {
-			if err := db.Delete(dbutils.IntermediateHashOfAccountBucket, prefix, nil); err != nil {
+		}, func(prefix []byte, branches, children uint16, h []common.Hash) {
+			if err := db.Delete(dbutils.TrieOfAccountsBucket, prefix, nil); err != nil {
 				panic(err)
 			}
 		})
-		shards.WalkStorageHashesWrites(writes, func(addrHash common.Hash, incarnation uint64, prefix []byte, branchChildren, children uint16, h []common.Hash) {
-			newV := make([]byte, len(h)*common.HashLength+4)
-			binary.BigEndian.PutUint16(newV, branchChildren)
-			binary.BigEndian.PutUint16(newV[2:], children)
-			for i := 0; i < len(h); i++ {
-				copy(newV[4+i*common.HashLength:4+(i+1)*common.HashLength], h[i].Bytes())
-			}
-			newK := dbutils.GenerateCompositeStoragePrefix(addrHash.Bytes(), incarnation, prefix)
-			if err := db.Put(dbutils.IntermediateHashOfStorageBucket, newK, newV); err != nil {
+		shards.WalkStorageHashesWrites(writes, func(addrHash common.Hash, incarnation uint64, prefix []byte, branches, children uint16, h []common.Hash) {
+			k, v := trie.IHStorageKey(addrHash.Bytes(), incarnation, prefix), trie.MarshalIH(branches, children, h)
+			if err := db.Put(dbutils.TrieOfStorageBucket, k, v); err != nil {
 				panic(err)
 			}
-		}, func(addrHash common.Hash, incarnation uint64, prefix []byte, branchChildren, children uint16, h []common.Hash) {
-			newK := dbutils.GenerateCompositeStoragePrefix(addrHash.Bytes(), incarnation, prefix)
-			if err := db.Delete(dbutils.IntermediateHashOfStorageBucket, newK, nil); err != nil {
+		}, func(addrHash common.Hash, incarnation uint64, prefix []byte, branches, children uint16, h []common.Hash) {
+			k := trie.IHStorageKey(addrHash.Bytes(), incarnation, prefix)
+			if err := db.Delete(dbutils.TrieOfStorageBucket, k, nil); err != nil {
 				panic(err)
 			}
 		})
@@ -849,7 +731,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 		accountIHCollector := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
 		storageIHCollector := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
 		newV := make([]byte, 0, 1024)
-		hashCollector := func(keyHex []byte, set uint16, branchSet uint16, hashes []byte, rootHash []byte) error {
+		hashCollector := func(keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error {
 			if len(keyHex) == 0 {
 				return nil
 			}
@@ -857,33 +739,17 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 				//fmt.Printf("collect del: %x\n", keyHex)
 				return accountIHCollector.Collect(keyHex, nil)
 			}
-			newV = newV[:len(hashes)+len(rootHash)+4]
-			binary.BigEndian.PutUint16(newV, branchSet)
-			binary.BigEndian.PutUint16(newV[2:], set)
-			if len(rootHash) == 0 {
-				copy(newV[4:], hashes)
-			} else {
-				copy(newV[4:], rootHash)
-				copy(newV[36:], hashes)
-			}
-			//fmt.Printf("collect write: %x, %016b\n", keyHex, branchSet)
+			trie.CollectIH(children, branches, hashes, rootHash, newV)
+			//fmt.Printf("collect write: %x, %016b\n", keyHex, branches)
 			return accountIHCollector.Collect(keyHex, newV)
 		}
 		newK := make([]byte, 0, 128)
-		storageHashCollector := func(accWithInc []byte, keyHex []byte, set uint16, branchSet uint16, hashes []byte, rootHash []byte) error {
+		storageHashCollector := func(accWithInc []byte, keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error {
 			newK = append(append(newK[:0], accWithInc...), keyHex...)
 			if hashes == nil {
 				return storageIHCollector.Collect(newK, nil)
 			}
-			newV = newV[:len(hashes)+len(rootHash)+4]
-			binary.BigEndian.PutUint16(newV, branchSet)
-			binary.BigEndian.PutUint16(newV[2:], set)
-			if len(rootHash) == 0 {
-				copy(newV[4:], hashes)
-			} else {
-				copy(newV[4:], rootHash)
-				copy(newV[36:], hashes)
-			}
+			trie.CollectIH(children, branches, hashes, rootHash, newV)
 			return storageIHCollector.Collect(newK, newV)
 		}
 		// hashCollector in the line below will collect deletes
@@ -905,7 +771,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 			"gen IH", generationIHTook,
 		)
 		if err := accountIHCollector.Load(logPrefix, db,
-			dbutils.IntermediateHashOfAccountBucket,
+			dbutils.TrieOfAccountsBucket,
 			etl.IdentityLoadFunc,
 			etl.TransformArgs{
 				Quit: quit,
@@ -914,7 +780,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 			return err
 		}
 		if err := storageIHCollector.Load(logPrefix, db,
-			dbutils.IntermediateHashOfStorageBucket,
+			dbutils.TrieOfStorageBucket,
 			etl.IdentityLoadFunc,
 			etl.TransformArgs{
 				Quit: quit,
@@ -950,8 +816,8 @@ func ResetHashState(db ethdb.Database) error {
 
 func ResetIH(db ethdb.Database) error {
 	if err := db.(ethdb.BucketsMigrator).ClearBuckets(
-		dbutils.IntermediateHashOfAccountBucket,
-		dbutils.IntermediateHashOfStorageBucket,
+		dbutils.TrieOfAccountsBucket,
+		dbutils.TrieOfStorageBucket,
 	); err != nil {
 		return err
 	}

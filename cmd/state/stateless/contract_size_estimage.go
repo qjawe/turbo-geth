@@ -35,7 +35,7 @@ func (a *KeyItem) Less(b llrb.Item) bool {
 func storageRoot(db ethdb.KV, contract common.Address) (common.Hash, error) {
 	var storageRoot common.Hash
 	if err := db.View(context.Background(), func(tx ethdb.Tx) error {
-		enc, err := tx.GetOne(dbutils.IntermediateHashOfStorageBucket, crypto.Keccak256(contract[:]))
+		enc, err := tx.GetOne(dbutils.TrieOfStorageBucket, crypto.Keccak256(contract[:]))
 		if err != nil {
 			return err
 		}

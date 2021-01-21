@@ -92,8 +92,8 @@ var dupSortIH = Migration{
 		if err := db.(ethdb.BucketsMigrator).ClearBuckets(
 			dbutils.IntermediateTrieHashBucketOld2,
 			dbutils.IntermediateTrieHashBucketOld1,
-			dbutils.IntermediateHashOfStorageBucket,
-			dbutils.IntermediateHashOfAccountBucket); err != nil {
+			dbutils.TrieOfStorageBucket,
+			dbutils.TrieOfAccountsBucket); err != nil {
 			return err
 		}
 		if err := stages.SaveStageProgress(db, stages.IntermediateHashes, 0); err != nil {

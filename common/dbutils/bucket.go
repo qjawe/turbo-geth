@@ -98,10 +98,10 @@ var (
 	StorageChangeSetBucket = "SCS"
 
 	// some_prefix_of(hash_of_address_of_account) => hash_of_subtrie
-	IntermediateHashOfAccountBucket = "ih_account"
-	IntermediateHashOfStorageBucket = "ih_storage"
-	IntermediateTrieHashBucketOld1  = "iTh"
-	IntermediateTrieHashBucketOld2  = "iTh2"
+	TrieOfAccountsBucket           = "trie_account"
+	TrieOfStorageBucket            = "trie_storage"
+	IntermediateTrieHashBucketOld1 = "iTh"
+	IntermediateTrieHashBucketOld2 = "iTh2"
 
 	// DatabaseInfoBucket is used to store information about data layout.
 	DatabaseInfoBucket        = "DBINFO"
@@ -252,8 +252,8 @@ var Buckets = []string{
 	Log,
 	Sequence,
 	EthTx,
-	IntermediateHashOfAccountBucket,
-	IntermediateHashOfStorageBucket,
+	TrieOfAccountsBucket,
+	TrieOfStorageBucket,
 	HashedAccountsBucket,
 	HashedStorageBucket,
 }
@@ -347,7 +347,7 @@ var BucketsConfigs = BucketsCfg{
 	StorageChangeSetBucket: {
 		Flags: DupSort,
 	},
-	//IntermediateHashOfStorageBucket: {
+	//TrieOfStorageBucket: {
 	//	Flags:               DupSort,
 	//	CustomDupComparator: DupCmpSuffix32,
 	//},

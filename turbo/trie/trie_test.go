@@ -956,28 +956,28 @@ func TestIHCursor(t *testing.T) {
 	_ = storage
 	hash := fmt.Sprintf("%064d", 0)
 
-	_ = db.Put(dbutils.IntermediateHashOfAccountBucket, common.FromHex("00"), common.FromHex(fmt.Sprintf("%04x", 0b0000000000000010)+hash))
-	_ = db.Put(dbutils.IntermediateHashOfAccountBucket, common.FromHex("01"), common.FromHex(fmt.Sprintf("%04x", 0b0000000000000111)+hash+hash+hash))
-	_ = db.Put(dbutils.IntermediateHashOfAccountBucket, common.FromHex("0101"), common.FromHex(fmt.Sprintf("%04x", 0b0000000000000111)+hash+hash+hash))
-	_ = db.Put(dbutils.IntermediateHashOfAccountBucket, common.FromHex("02"), common.FromHex(fmt.Sprintf("%04x", 0b1000000000000000)+hash))
-	_ = db.Put(dbutils.IntermediateHashOfAccountBucket, common.FromHex("03"), common.FromHex(fmt.Sprintf("%04x", 0b1000000000000001)+hash+hash))
-	_ = db.Put(dbutils.IntermediateHashOfAccountBucket, common.FromHex("0300"), common.FromHex(fmt.Sprintf("%04x", 0b0000000000000001)+hash))
-	_ = db.Put(dbutils.IntermediateHashOfAccountBucket, common.FromHex("030f"), common.FromHex(fmt.Sprintf("%04x", 0b1000000000000000)+hash))
-	_ = db.Put(dbutils.IntermediateHashOfAccountBucket, common.FromHex("04"), common.FromHex(fmt.Sprintf("%04x", 0b0000000000000001)+hash))
+	_ = db.Put(dbutils.TrieOfAccountsBucket, common.FromHex("00"), common.FromHex(fmt.Sprintf("%04x", 0b0000000000000010)+hash))
+	_ = db.Put(dbutils.TrieOfAccountsBucket, common.FromHex("01"), common.FromHex(fmt.Sprintf("%04x", 0b0000000000000111)+hash+hash+hash))
+	_ = db.Put(dbutils.TrieOfAccountsBucket, common.FromHex("0101"), common.FromHex(fmt.Sprintf("%04x", 0b0000000000000111)+hash+hash+hash))
+	_ = db.Put(dbutils.TrieOfAccountsBucket, common.FromHex("02"), common.FromHex(fmt.Sprintf("%04x", 0b1000000000000000)+hash))
+	_ = db.Put(dbutils.TrieOfAccountsBucket, common.FromHex("03"), common.FromHex(fmt.Sprintf("%04x", 0b1000000000000001)+hash+hash))
+	_ = db.Put(dbutils.TrieOfAccountsBucket, common.FromHex("0300"), common.FromHex(fmt.Sprintf("%04x", 0b0000000000000001)+hash))
+	_ = db.Put(dbutils.TrieOfAccountsBucket, common.FromHex("030f"), common.FromHex(fmt.Sprintf("%04x", 0b1000000000000000)+hash))
+	_ = db.Put(dbutils.TrieOfAccountsBucket, common.FromHex("04"), common.FromHex(fmt.Sprintf("%04x", 0b0000000000000001)+hash))
 	//for _, k := range []string{"00", "0001", "01", "0100", "0101", "0102", "02"} {
 	//	kk := common.FromHex(k)
-	//	_ = db.Put(dbutils.IntermediateHashOfAccountBucket, kk, kk)
+	//	_ = db.Put(dbutils.TrieOfAccountsBucket, kk, kk)
 	//}
 	//for _, k := range []string{acc, acc + "00", acc + "01", acc + "02"} {
 	//	kk := common.FromHex(k)
-	//	_ = db.Put(dbutils.IntermediateHashOfStorageBucket, kk, kk)
+	//	_ = db.Put(dbutils.TrieOfStorageBucket, kk, kk)
 	//}
 
 	tx, err := db.KV().Begin(context.Background(), nil, ethdb.RW)
 	require.NoError(err)
 	defer tx.Rollback()
 
-	cursor := tx.Cursor(dbutils.IntermediateHashOfAccountBucket)
+	cursor := tx.Cursor(dbutils.TrieOfAccountsBucket)
 	rl := NewRetainList(0)
 	//rl.AddHex(common.FromHex("0101"))
 	rl.AddHex(common.FromHex(acc))
@@ -1024,7 +1024,7 @@ func TestIHCursor(t *testing.T) {
 	k, _, _ = ih.Next()
 	assert.Nil(t, k)
 
-	//cursorS := tx.Cursor(dbutils.IntermediateHashOfStorageBucket)
+	//cursorS := tx.Cursor(dbutils.TrieOfStorageBucket)
 	//ihStorage := IH(canUse, cursorS)
 	//
 	//k, _, _ = ihStorage.SeekToAccount(common.FromHex(acc))
@@ -1048,7 +1048,7 @@ func TestEmptyRoot(t *testing.T) {
 	}
 	//for _, k := range []string{acc, acc + "00", acc + "01", acc + "02"} {
 	//	kk := common.FromHex(k)
-	//	_ = db.Put(dbutils.IntermediateHashOfStorageBucket, kk, kk)
+	//	_ = db.Put(dbutils.TrieOfStorageBucket, kk, kk)
 	//}
 
 	rl := NewRetainList(0)
