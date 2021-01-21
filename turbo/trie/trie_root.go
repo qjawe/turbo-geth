@@ -387,7 +387,7 @@ func loadAccIHToCache(ih ethdb.Cursor, prefix []byte, ranges [][]byte, cache *sh
 
 func loadAccsToCache(accs ethdb.Cursor, ranges [][]byte, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
 	var storageIHRanges [][]byte
-	for i := 0; i < len(ranges)/2; i += 2 {
+	for i := 0; i < len(ranges); i += 2 {
 		if err := common.Stopped(quit); err != nil {
 			return nil, err
 		}
@@ -440,6 +440,9 @@ func collectMissedAccounts(canUse func(prefix []byte) bool, prefix []byte, cache
 		if !hasRange {
 			return
 		}
+		if isDenseSequence(rangeFrom, cur) {
+			return
+		}
 		ranges = append(ranges, common.CopyBytes(rangeFrom), common.CopyBytes(cur))
 		hasRange = false
 	}
@@ -463,17 +466,12 @@ func collectMissedAccounts(canUse func(prefix []byte) bool, prefix []byte, cache
 			return nil
 		}
 
-		//inCache := cache.HasAccountWithInPrefix(cur)
-		//fmt.Printf("in cache2: %x, %t\n", cur, inCache)
-		//if inCache {
-		//	endRange(cur)
-		//} else {
-		//	addToRange(cur)
-		//}
+		addToRange(cur)
 		return nil
 	}); err != nil {
 		return nil, err
 	}
+
 	return ranges, nil
 }
 

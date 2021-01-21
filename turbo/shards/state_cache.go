@@ -603,6 +603,7 @@ func (sc *StateCache) SetAccountAbsent(address []byte) {
 
 func (sc *StateCache) setWrite(item CacheItem, writeItem CacheWriteItem, delete bool) {
 	id := id(item)
+	item.SetQueuePos(-1)
 	// Check if this is going to be modification of the existing entry
 	if existing := sc.writes[id].Get(writeItem); existing != nil {
 		cacheWriteItem := existing.(CacheWriteItem)
