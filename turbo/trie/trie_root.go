@@ -409,7 +409,7 @@ func IHStorageKey(addressHash []byte, incarnation uint64, prefix []byte) []byte 
 	return dbutils.GenerateCompositeStoragePrefix(addressHash, incarnation, prefix)
 }
 
-func CollectIH(children, branchChildren uint16, hashes []byte, rootHash []byte, buf []byte) {
+func IHValue(children, branchChildren uint16, hashes []byte, rootHash []byte, buf []byte) {
 	buf = buf[:len(hashes)+len(rootHash)+4]
 	binary.BigEndian.PutUint16(buf, branchChildren)
 	binary.BigEndian.PutUint16(buf[2:], children)

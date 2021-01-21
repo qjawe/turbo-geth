@@ -64,7 +64,7 @@ func (ahi *AccountHashItem) HasFlag(flag uint16) bool { return ahi.flags&flag !=
 func (ahi *AccountHashItem) SetFlags(flags uint16)    { ahi.flags |= flags }
 func (ahi *AccountHashItem) ClearFlags(flags uint16)  { ahi.flags &^= flags }
 func (ahi *AccountHashItem) String() string {
-	return fmt.Sprintf("AccountHashItem(addrHashPrefix=%x,bits=%d)", ahi.addrHashPrefix)
+	return fmt.Sprintf("AccountHashItem(addrHashPrefix=%x)", ahi.addrHashPrefix)
 }
 
 func (ahi *AccountHashItem) CopyValueFrom(item CacheItem) {
