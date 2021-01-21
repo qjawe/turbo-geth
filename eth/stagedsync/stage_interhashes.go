@@ -116,7 +116,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 					cache.SetAccountHashDelete(keyHex)
 					return nil
 				}
-				newV := trie.TypedIH(hashes, rootHash)
+				newV := trie.IHTypedValue(hashes, rootHash)
 				cache.SetAccountHashWrite(keyHex, branches, children, newV)
 				return nil
 			}
@@ -126,7 +126,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 					cache.SetStorageHashDelete(addr, inc, keyHex, branches, children, nil)
 					return nil
 				}
-				newV := trie.TypedIH(hashes, rootHash)
+				newV := trie.IHTypedValue(hashes, rootHash)
 				cache.SetStorageHashWrite(addr, inc, keyHex, branches, children, newV)
 				return nil
 			}
@@ -432,7 +432,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 					cache.SetAccountHashDelete(keyHex)
 					return nil
 				}
-				newV := trie.TypedIH(hashes, rootHash)
+				newV := trie.IHTypedValue(hashes, rootHash)
 				cache.SetAccountHashWrite(keyHex, branches, children, newV)
 				return nil
 			}
@@ -442,7 +442,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 					cache.SetStorageHashDelete(addr, inc, keyHex, branches, children, nil)
 					return nil
 				}
-				newV := trie.TypedIH(hashes, rootHash)
+				newV := trie.IHTypedValue(hashes, rootHash)
 				cache.SetStorageHashWrite(addr, inc, keyHex, branches, children, newV)
 				return nil
 			}
@@ -650,7 +650,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 					cache.SetAccountHashDelete(keyHex)
 					return nil
 				}
-				cache.SetAccountHashWrite(keyHex, branches, children, trie.TypedIH(hashes, rootHash))
+				cache.SetAccountHashWrite(keyHex, branches, children, trie.IHTypedValue(hashes, rootHash))
 				return nil
 			}
 			storageHashCollector := func(accWithInc []byte, keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error {
@@ -659,7 +659,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 					cache.SetStorageHashDelete(addr, inc, keyHex, branches, children, nil)
 					return nil
 				}
-				cache.SetStorageHashWrite(addr, inc, keyHex, branches, children, trie.TypedIH(hashes, rootHash))
+				cache.SetStorageHashWrite(addr, inc, keyHex, branches, children, trie.IHTypedValue(hashes, rootHash))
 				return nil
 			}
 			loader := trie.NewFlatDBTrieLoader(logPrefix)

@@ -385,56 +385,6 @@ func loadAccIHToCache(ih ethdb.Cursor, prefix []byte, ranges [][]byte, cache *sh
 	return nil
 }
 
-func UnmarshalIH(v []byte) (uint16, uint16, []common.Hash) {
-	branches, children := binary.BigEndian.Uint16(v), binary.BigEndian.Uint16(v[2:])
-	v = v[4:]
-	newV := make([]common.Hash, len(v[4:])/common.HashLength)
-	for i := 0; i < len(newV); i++ {
-		newV[i].SetBytes(v[i*common.HashLength : (i+1)*common.HashLength])
-	}
-	return branches, children, newV
-}
-
-func MarshalIH(branchChildren, children uint16, h []common.Hash) []byte {
-	v := make([]byte, len(h)*common.HashLength+4)
-	binary.BigEndian.PutUint16(v, branchChildren)
-	binary.BigEndian.PutUint16(v[2:], children)
-	for i := 0; i < len(h); i++ {
-		copy(v[4+i*common.HashLength:4+(i+1)*common.HashLength], h[i].Bytes())
-	}
-	return v
-}
-
-func IHStorageKey(addressHash []byte, incarnation uint64, prefix []byte) []byte {
-	return dbutils.GenerateCompositeStoragePrefix(addressHash, incarnation, prefix)
-}
-
-func IHValue(children, branchChildren uint16, hashes []byte, rootHash []byte, buf []byte) {
-	buf = buf[:len(hashes)+len(rootHash)+4]
-	binary.BigEndian.PutUint16(buf, branchChildren)
-	binary.BigEndian.PutUint16(buf[2:], children)
-	if len(rootHash) == 0 {
-		copy(buf[4:], hashes)
-	} else {
-		copy(buf[4:], rootHash)
-		copy(buf[36:], hashes)
-	}
-}
-
-func TypedIH(hashes []byte, rootHash []byte) []common.Hash {
-	to := make([]common.Hash, len(hashes)/common.HashLength+len(rootHash)/common.HashLength)
-	i := 0
-	if len(rootHash) > 0 {
-		to[0].SetBytes(rootHash)
-		i++
-	}
-	for j := 0; j < len(hashes); j++ {
-		to[i].SetBytes(hashes[j*common.HashLength : (j+1)*common.HashLength])
-		i++
-	}
-	return to
-}
-
 func loadAccsToCache(accs ethdb.Cursor, ranges [][]byte, cache *shards.StateCache, quit <-chan struct{}) ([][]byte, error) {
 	var storageIHRanges [][]byte
 	for i := 0; i < len(ranges)/2; i += 2 {
@@ -612,21 +562,6 @@ func (l *FlatDBTrieLoader) prep(accs, ihAcc ethdb.Cursor, prefix []byte, cache *
 		return err
 	}
 	_ = storageIHPrefixes
-	ihKSBuf := make([]byte, 256)
-	if err := cache.WalkStorageHashes(func(addrHash common.Hash, incarnation uint64, locHashPrefix []byte, branchChildren uint16, children uint16, hashes []common.Hash) error {
-		for i := 0; i < 16; i++ {
-			if ((uint16(1) << i) & branchChildren) == 0 {
-				continue
-			}
-			ihK := tmpMakeIHPrefix(addrHash, incarnation, locHashPrefix, uint8(i), ihKSBuf)
-			if l.rd.Retain(ihK) {
-				cache.SetStorageHashDelete(addrHash, incarnation, locHashPrefix, branchChildren, children, hashes)
-			}
-		}
-		return nil
-	}); err != nil {
-		return err
-	}
 	return nil
 }
 
@@ -1760,6 +1695,56 @@ func keyIsBefore(k1, k2 []byte) bool {
 		return true
 	}
 	return bytes.Compare(k1, k2) < 0
+}
+
+func UnmarshalIH(v []byte) (uint16, uint16, []common.Hash) {
+	branches, children := binary.BigEndian.Uint16(v), binary.BigEndian.Uint16(v[2:])
+	v = v[4:]
+	newV := make([]common.Hash, len(v[4:])/common.HashLength)
+	for i := 0; i < len(newV); i++ {
+		newV[i].SetBytes(v[i*common.HashLength : (i+1)*common.HashLength])
+	}
+	return branches, children, newV
+}
+
+func MarshalIH(branchChildren, children uint16, h []common.Hash) []byte {
+	v := make([]byte, len(h)*common.HashLength+4)
+	binary.BigEndian.PutUint16(v, branchChildren)
+	binary.BigEndian.PutUint16(v[2:], children)
+	for i := 0; i < len(h); i++ {
+		copy(v[4+i*common.HashLength:4+(i+1)*common.HashLength], h[i].Bytes())
+	}
+	return v
+}
+
+func IHStorageKey(addressHash []byte, incarnation uint64, prefix []byte) []byte {
+	return dbutils.GenerateCompositeStoragePrefix(addressHash, incarnation, prefix)
+}
+
+func IHValue(children, branchChildren uint16, hashes []byte, rootHash []byte, buf []byte) {
+	buf = buf[:len(hashes)+len(rootHash)+4]
+	binary.BigEndian.PutUint16(buf, branchChildren)
+	binary.BigEndian.PutUint16(buf[2:], children)
+	if len(rootHash) == 0 {
+		copy(buf[4:], hashes)
+	} else {
+		copy(buf[4:], rootHash)
+		copy(buf[36:], hashes)
+	}
+}
+
+func IHTypedValue(hashes []byte, rootHash []byte) []common.Hash {
+	to := make([]common.Hash, len(hashes)/common.HashLength+len(rootHash)/common.HashLength)
+	i := 0
+	if len(rootHash) > 0 {
+		to[0].SetBytes(rootHash)
+		i++
+	}
+	for j := 0; j < len(hashes); j++ {
+		to[i].SetBytes(hashes[j*common.HashLength : (j+1)*common.HashLength])
+		i++
+	}
+	return to
 }
 
 func tmpMakeIHPrefix(addrHash common.Hash, incarnation uint64, prefix []byte, branchChild uint8, buf []byte) []byte {
