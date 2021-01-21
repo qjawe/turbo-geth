@@ -117,6 +117,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 					return nil
 				}
 				newV := trie.IHTypedValue(hashes, rootHash)
+				fmt.Printf("collect: %x,%x\n", keyHex, newV)
 				cache.SetAccountHashWrite(keyHex, branches, children, newV)
 				return nil
 			}
@@ -166,6 +167,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 
 		shards.WalkAccountHashesWrites(writes, func(prefix []byte, branches, children uint16, h []common.Hash) {
 			newV := trie.MarshalIH(branches, children, h)
+			fmt.Printf("write: %x,%x\n", prefix, newV)
 			if err := db.Put(dbutils.TrieOfAccountsBucket, prefix, newV); err != nil {
 				panic(err)
 			}
@@ -198,7 +200,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 				//fmt.Printf("collect del: %x\n", keyHex)
 				return accountIHCollector.Collect(keyHex, nil)
 			}
-			trie.IHValue(set, branchSet, hashes, rootHash, newV)
+			newV = trie.IHValue(set, branchSet, hashes, rootHash, newV)
 			//fmt.Printf("collect write: %x, %016b\n", keyHex, branchSet)
 			return accountIHCollector.Collect(keyHex, newV)
 		}
@@ -208,7 +210,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 			if hashes == nil {
 				return storageIHCollector.Collect(newK, nil)
 			}
-			trie.IHValue(set, branchSet, hashes, rootHash, newV)
+			newV = trie.IHValue(set, branchSet, hashes, rootHash, newV)
 			//fmt.Printf("collect st write: %x, %016b\n", newK, branchSet)
 			return storageIHCollector.Collect(newK, newV)
 		}
@@ -522,7 +524,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 				//fmt.Printf("collect del: %x\n", keyHex)
 				return accountIHCollector.Collect(keyHex, nil)
 			}
-			trie.IHValue(set, branchSet, hashes, rootHash, newV)
+			newV = trie.IHValue(set, branchSet, hashes, rootHash, newV)
 			//fmt.Printf("collect write: %x, %016b\n", keyHex, branchSet)
 			return accountIHCollector.Collect(keyHex, newV)
 		}
@@ -532,7 +534,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 			if hashes == nil {
 				return storageIHCollector.Collect(newK, nil)
 			}
-			trie.IHValue(set, branchSet, hashes, rootHash, newV)
+			newV = trie.IHValue(set, branchSet, hashes, rootHash, newV)
 			return storageIHCollector.Collect(newK, newV)
 		}
 		// hashCollector in the line below will collect deletes
@@ -739,7 +741,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 				//fmt.Printf("collect del: %x\n", keyHex)
 				return accountIHCollector.Collect(keyHex, nil)
 			}
-			trie.IHValue(children, branches, hashes, rootHash, newV)
+			newV = trie.IHValue(children, branches, hashes, rootHash, newV)
 			//fmt.Printf("collect write: %x, %016b\n", keyHex, branches)
 			return accountIHCollector.Collect(keyHex, newV)
 		}
@@ -749,7 +751,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 			if hashes == nil {
 				return storageIHCollector.Collect(newK, nil)
 			}
-			trie.IHValue(children, branches, hashes, rootHash, newV)
+			newV = trie.IHValue(children, branches, hashes, rootHash, newV)
 			return storageIHCollector.Collect(newK, newV)
 		}
 		// hashCollector in the line below will collect deletes

@@ -707,8 +707,8 @@ func (l *FlatDBTrieLoader) CalcTrieRootOnCache(db ethdb.Database, prefix []byte,
 			if len(k) > 2 {
 				return true, nil
 			}
-			branches, children, newV := UnmarshalIH(v)
-			cache.SetAccountHashesRead(k, branches, children, newV)
+			branches, children, hashes := UnmarshalIH(v)
+			cache.SetAccountHashesRead(k, branches, children, hashes)
 			return true, nil
 		}); err != nil {
 			return EmptyRoot, err
@@ -1701,7 +1701,7 @@ func IHStorageKey(addressHash []byte, incarnation uint64, prefix []byte) []byte 
 	return dbutils.GenerateCompositeStoragePrefix(addressHash, incarnation, prefix)
 }
 
-func IHValue(children, branchChildren uint16, hashes []byte, rootHash []byte, buf []byte) {
+func IHValue(children, branchChildren uint16, hashes []byte, rootHash []byte, buf []byte) []byte {
 	buf = buf[:len(hashes)+len(rootHash)+4]
 	binary.BigEndian.PutUint16(buf, branchChildren)
 	binary.BigEndian.PutUint16(buf[2:], children)
@@ -1711,6 +1711,7 @@ func IHValue(children, branchChildren uint16, hashes []byte, rootHash []byte, bu
 		copy(buf[4:], rootHash)
 		copy(buf[36:], hashes)
 	}
+	return buf
 }
 
 func IHTypedValue(hashes []byte, rootHash []byte) []common.Hash {
