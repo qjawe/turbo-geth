@@ -400,7 +400,6 @@ func loadAccsToCache(accs ethdb.Cursor, ranges [][]byte, cache *shards.StateCach
 		}
 		hexutil.CompressNibbles(from, &from)
 		hexutil.CompressNibbles(to, &to)
-		fmt.Printf("acc: %x,%x\n", from, to)
 		for k, v, err := accs.Seek(from); k != nil; k, v, err = accs.Next() {
 			if err != nil {
 				return nil, err
@@ -511,7 +510,7 @@ GotItemFromCache:
 
 				cur[len(cur)-1] = uint8(id[lvl])
 				if !isBranch() {
-					if err := walker(false, false, cur, hashes[lvl][hashID[lvl]]); err != nil {
+					if err := walker(false, false, cur, common.Hash{}); err != nil {
 						return err
 					}
 					continue
@@ -1680,7 +1679,7 @@ func keyIsBefore(k1, k2 []byte) bool {
 func UnmarshalIH(v []byte) (uint16, uint16, []common.Hash) {
 	branches, children := binary.BigEndian.Uint16(v), binary.BigEndian.Uint16(v[2:])
 	v = v[4:]
-	newV := make([]common.Hash, len(v[4:])/common.HashLength)
+	newV := make([]common.Hash, len(v)/common.HashLength)
 	for i := 0; i < len(newV); i++ {
 		newV[i].SetBytes(v[i*common.HashLength : (i+1)*common.HashLength])
 	}
@@ -1721,7 +1720,7 @@ func IHTypedValue(hashes []byte, rootHash []byte) []common.Hash {
 		to[0].SetBytes(rootHash)
 		i++
 	}
-	for j := 0; j < len(hashes); j++ {
+	for j := 0; j < len(hashes)/common.HashLength; j++ {
 		to[i].SetBytes(hashes[j*common.HashLength : (j+1)*common.HashLength])
 		i++
 	}

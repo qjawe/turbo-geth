@@ -428,7 +428,6 @@ GotItemFromCache:
 				}
 				hashID[lvl]++
 				if canUse(cur) {
-					fmt.Printf("%x, %x\n", cur, hashes[lvl])
 					if err := walker(cur, hashes[lvl][hashID[lvl]], skipState); err != nil {
 						return err
 					}
