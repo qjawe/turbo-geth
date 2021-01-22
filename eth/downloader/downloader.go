@@ -29,6 +29,7 @@ import (
 	"github.com/c2h5oh/datasize"
 	ethereum "github.com/ledgerwatch/turbo-geth"
 	"github.com/ledgerwatch/turbo-geth/common"
+	"github.com/ledgerwatch/turbo-geth/common/dbutils"
 	"github.com/ledgerwatch/turbo-geth/consensus"
 	"github.com/ledgerwatch/turbo-geth/core"
 	"github.com/ledgerwatch/turbo-geth/core/rawdb"
@@ -42,6 +43,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/metrics"
 	"github.com/ledgerwatch/turbo-geth/params"
 	"github.com/ledgerwatch/turbo-geth/turbo/shards"
+	"github.com/ledgerwatch/turbo-geth/turbo/trie"
 )
 
 var (
@@ -553,6 +555,16 @@ func (d *Downloader) syncWithPeer(p *peerConnection, hash common.Hash, blockNumb
 		var cache *shards.StateCache
 		if d.cacheSize > 0 {
 			cache = shards.NewStateCache(32, d.cacheSize)
+			if err := d.stateDB.Walk(dbutils.TrieOfAccountsBucket, nil, 0, func(k, v []byte) (bool, error) {
+				if len(k) > 2 {
+					return true, nil
+				}
+				branches, children, hashes := trie.UnmarshalIH(v)
+				cache.SetAccountHashesRead(k, branches, children, hashes)
+				return true, nil
+			}); err != nil {
+				return err
+			}
 		}
 
 		d.stagedSyncState, err = d.stagedSync.Prepare(

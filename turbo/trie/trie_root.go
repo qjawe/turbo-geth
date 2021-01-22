@@ -699,19 +699,6 @@ func (l *FlatDBTrieLoader) CalcTrieRootOnCache(db ethdb.Database, prefix []byte,
 	_ = ihStorageC
 	_ = stC
 
-	if _, _, _, _, ok := cache.GetAccountHash(prefix); !ok { // first warmup
-		if err := ethdb.ForEach(ihAccC, func(k, v []byte) (bool, error) {
-			if len(k) > 2 {
-				return true, nil
-			}
-			branches, children, hashes := UnmarshalIH(v)
-			cache.SetAccountHashesRead(k, branches, children, hashes)
-			return true, nil
-		}); err != nil {
-			return EmptyRoot, err
-		}
-	}
-
 	if err := l.prep(accsC, ihAccC, prefix, cache, quit); err != nil {
 		panic(err)
 	}
@@ -790,7 +777,7 @@ func (r *RootHashAggregator) Receive(itemType StreamItem,
 	hash []byte,
 	cutoff int,
 ) error {
-	fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
+	//fmt.Printf("1: %d, %x, %x, %x\n", itemType, accountKey, storageKey, hash)
 	switch itemType {
 	case StorageStreamItem:
 		if len(r.currAccK) == 0 {

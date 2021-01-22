@@ -336,12 +336,14 @@ func (rh *ReadHeap) Push(x interface{}) {
 	// Push and Pop use pointer receivers because they modify the slice's length,
 	// not just its contents.
 	cacheItem := x.(CacheItem)
+	fmt.Printf("push: %d, %T\n", len(rh.items), x)
 	cacheItem.SetQueuePos(len(rh.items))
 	rh.items = append(rh.items, cacheItem)
 }
 
 func (rh *ReadHeap) Pop() interface{} {
 	cacheItem := rh.items[len(rh.items)-1]
+	fmt.Printf("pop: %d, %T\n", len(rh.items), cacheItem)
 	rh.items = rh.items[:len(rh.items)-1]
 	return cacheItem
 }
@@ -625,7 +627,12 @@ func (sc *StateCache) setWrite(item CacheItem, writeItem CacheWriteItem, delete 
 	if existing := sc.readWrites[id].Get(item); existing != nil {
 		cacheItem := existing.(CacheItem)
 		// Remove seek the reads queue
-		heap.Remove(&sc.readQueue[id], cacheItem.GetQueuePos())
+		if sc.readQueue[id].Len() > 0 {
+			fmt.Printf("remove: %d, %d, %T\n", id, cacheItem.GetQueuePos(), cacheItem)
+			fmt.Printf("before: %d\n", sc.readQueue[id].Len())
+			heap.Remove(&sc.readQueue[id], cacheItem.GetQueuePos())
+			fmt.Printf("after: %d\n", sc.readQueue[id].Len())
+		}
 		sc.readSize += item.GetSize()
 		sc.readSize -= cacheItem.GetSize()
 		cacheItem.SetFlags(ModifiedFlag)

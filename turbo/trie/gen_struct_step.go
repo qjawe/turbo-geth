@@ -326,7 +326,7 @@ func GenStructStep2(
 				branches[maxLen-1] |= (uint16(1) << curr[maxLen-1])
 			}
 
-			e.printTopHashes(curr[:maxLen], groups[maxLen], 0)
+			//e.printTopHashes(curr[:maxLen], groups[maxLen], 0)
 			if h != nil {
 				if branches[maxLen] == 0 {
 					if err := h(curr[:maxLen], 0, 0, nil, nil); err != nil {

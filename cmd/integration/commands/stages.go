@@ -27,6 +27,7 @@ import (
 	"github.com/ledgerwatch/turbo-geth/turbo/shards"
 	"github.com/ledgerwatch/turbo-geth/turbo/silkworm"
 	"github.com/ledgerwatch/turbo-geth/turbo/snapshotsync"
+	"github.com/ledgerwatch/turbo-geth/turbo/trie"
 	"github.com/spf13/cobra"
 )
 
@@ -690,6 +691,26 @@ func newSync(quitCh <-chan struct{}, db ethdb.Database, tx ethdb.Database, hook 
 	var cache *shards.StateCache
 	if cacheSize > 0 {
 		cache = shards.NewStateCache(32, cacheSize)
+		if err := db.Walk(dbutils.TrieOfAccountsBucket, nil, 0, func(k, v []byte) (bool, error) {
+			if len(k) > 2 {
+				return true, nil
+			}
+			branches, children, hashes := trie.UnmarshalIH(v)
+			cache.SetAccountHashesRead(k, branches, children, hashes)
+			return true, nil
+		}); err != nil {
+			panic(err)
+		}
+		if err := db.Walk(dbutils.PlainStateBucket, nil, 0, func(k, v []byte) (bool, error) {
+			if len(k) > 2 {
+				return true, nil
+			}
+			branches, children, hashes := trie.UnmarshalIH(v)
+			cache.SetAccountHashesRead(k, branches, children, hashes)
+			return true, nil
+		}); err != nil {
+			panic(err)
+		}
 	}
 	st, err := stagedsync.New(
 		stagedsync.DefaultStages(),
