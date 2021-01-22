@@ -82,15 +82,15 @@ type StorageHashWriteItem struct {
 	i *StorageHashItem
 }
 type StorageHashItem struct {
-	sequence       int
-	queuePos       int
-	flags          uint16
-	branchChildren uint16
-	children       uint16
-	addrHash       common.Hash
-	incarnation    uint64
-	hashes         []common.Hash
-	locHashPrefix  []byte
+	sequence      int
+	queuePos      int
+	flags         uint16
+	branches      uint16
+	children      uint16
+	addrHash      common.Hash
+	incarnation   uint64
+	hashes        []common.Hash
+	locHashPrefix []byte
 }
 
 func (wi *StorageHashWriteItem) GetCacheItem() CacheItem     { return wi.i }
@@ -234,24 +234,24 @@ func (sc *StateCache) SetAccountHashDelete(prefix []byte) {
 
 func (sc *StateCache) SetStorageHashRead(addrHash common.Hash, incarnation uint64, locHashPrefix []byte, branchChildren, children uint16, hashes []common.Hash) {
 	ai := StorageHashItem{
-		addrHash:       addrHash,
-		incarnation:    incarnation,
-		locHashPrefix:  common.CopyBytes(locHashPrefix),
-		branchChildren: branchChildren,
-		children:       children,
-		hashes:         hashes,
+		addrHash:      addrHash,
+		incarnation:   incarnation,
+		locHashPrefix: common.CopyBytes(locHashPrefix),
+		branches:      branchChildren,
+		children:      children,
+		hashes:        hashes,
 	}
 	sc.setRead(&ai, false /* absent */)
 }
 
 func (sc *StateCache) SetStorageHashWrite(addrHash common.Hash, incarnation uint64, locHashPrefix []byte, branchChildren, children uint16, hashes []common.Hash) {
 	ai := StorageHashItem{
-		addrHash:       addrHash,
-		incarnation:    incarnation,
-		locHashPrefix:  common.CopyBytes(locHashPrefix),
-		branchChildren: branchChildren,
-		children:       children,
-		hashes:         hashes,
+		addrHash:      addrHash,
+		incarnation:   incarnation,
+		locHashPrefix: common.CopyBytes(locHashPrefix),
+		branches:      branchChildren,
+		children:      children,
+		hashes:        hashes,
 	}
 	var wi StorageHashWriteItem
 	wi.i = &ai
@@ -260,12 +260,12 @@ func (sc *StateCache) SetStorageHashWrite(addrHash common.Hash, incarnation uint
 
 func (sc *StateCache) SetStorageHashDelete(addrHash common.Hash, incarnation uint64, locHashPrefix []byte, branchChildren, children uint16, hashes []common.Hash) {
 	ai := StorageHashItem{
-		addrHash:       addrHash,
-		incarnation:    incarnation,
-		locHashPrefix:  common.CopyBytes(locHashPrefix),
-		branchChildren: branchChildren,
-		children:       children,
-		hashes:         hashes,
+		addrHash:      addrHash,
+		incarnation:   incarnation,
+		locHashPrefix: common.CopyBytes(locHashPrefix),
+		branches:      branchChildren,
+		children:      children,
+		hashes:        hashes,
 	}
 	var wi StorageHashWriteItem
 	wi.i = &ai
@@ -323,7 +323,7 @@ func (sc *StateCache) GetStorageHash(addrHash common.Hash, incarnation uint64, p
 	if item, ok := sc.get(&key); ok {
 		if item != nil {
 			i := item.(*StorageHashItem)
-			return i.locHashPrefix, i.branchChildren, i.children, i.hashes, true
+			return i.locHashPrefix, i.branches, i.children, i.hashes, true
 		}
 		return nil, 0, 0, nil, true
 	}
@@ -506,7 +506,7 @@ func (sc *StateCache) StorageHashesSeek(addrHash common.Hash, incarnation uint64
 	if cur == nil {
 		return nil, 0, 0, nil
 	}
-	return cur.locHashPrefix, cur.branchChildren, cur.children, cur.hashes
+	return cur.locHashPrefix, cur.branches, cur.children, cur.hashes
 }
 
 func WalkAccountHashesWrites(writes [5]*btree.BTree, update func(prefix []byte, branchChildren, children uint16, h []common.Hash), del func(prefix []byte, branchChildren, children uint16, h []common.Hash)) {
@@ -532,7 +532,7 @@ func (sc *StateCache) WalkStorageHashes(walker func(addrHash common.Hash, incarn
 		if it.HasFlag(AbsentFlag) || it.HasFlag(DeletedFlag) {
 			return true
 		}
-		if err := walker(it.addrHash, it.incarnation, it.locHashPrefix, it.branchChildren, it.children, it.hashes); err != nil {
+		if err := walker(it.addrHash, it.incarnation, it.locHashPrefix, it.branches, it.children, it.hashes); err != nil {
 			panic(err)
 		}
 		return true
@@ -569,7 +569,7 @@ func (sc *StateCache) StorageHashes(adrHash common.Hash, incarnation uint64, wal
 			hashId++
 		}
 		for i := 0; i < 16; i++ {
-			if ((uint16(1) << i) & cur.branchChildren) == 0 {
+			if ((uint16(1) << i) & cur.branches) == 0 {
 				continue
 			}
 			ihK = append(append(ihK[:0], cur.locHashPrefix...), uint8(i))
@@ -597,10 +597,10 @@ func WalkStorageHashesWrites(writes [5]*btree.BTree, update func(addrHash common
 	writes[id].Ascend(func(i btree.Item) bool {
 		it := i.(*StorageHashWriteItem)
 		if it.i.HasFlag(AbsentFlag) || it.i.HasFlag(DeletedFlag) {
-			del(it.i.addrHash, it.i.incarnation, it.i.locHashPrefix, it.i.branchChildren, it.i.children, it.i.hashes)
+			del(it.i.addrHash, it.i.incarnation, it.i.locHashPrefix, it.i.branches, it.i.children, it.i.hashes)
 			return true
 		}
-		update(it.i.addrHash, it.i.incarnation, it.i.locHashPrefix, it.i.branchChildren, it.i.children, it.i.hashes)
+		update(it.i.addrHash, it.i.incarnation, it.i.locHashPrefix, it.i.branches, it.i.children, it.i.hashes)
 		return true
 	})
 }
