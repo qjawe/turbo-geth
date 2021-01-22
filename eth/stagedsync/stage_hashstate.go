@@ -247,18 +247,40 @@ func getExtractFunc(db ethdb.Getter, cache *shards.StateCache, changeSetBucket s
 
 		if cache != nil {
 			if len(k) == 20 {
+				_, inCache := cache.GetAccount(k)
 				if len(value) == 0 {
-					cache.SetAccountDelete(k)
+					if inCache {
+						cache.SetAccountDelete(k)
+					} else {
+						cache.SetAccountAbsent(k)
+					}
 				} else {
 					acc := &accounts.Account{}
-					_ = acc.DecodeForStorage(value)
-					cache.SetAccountWrite(k, acc)
+					err = acc.DecodeForStorage(value)
+					if err != nil {
+						return err
+					}
+					if inCache {
+						cache.SetAccountWrite(k, acc)
+					} else {
+						cache.SetAccountRead(k, acc)
+					}
 				}
 			} else {
+				stK, inc, stHash := k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:]
+				_, inCache := cache.GetStorage(stK, inc, stHash)
 				if len(value) == 0 {
-					cache.SetStorageDelete(k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:])
+					if inCache {
+						cache.SetStorageDelete(stK, inc, stHash)
+					} else {
+						cache.SetStorageAbsent(stK, inc, stHash)
+					}
 				} else {
-					cache.SetStorageWrite(k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:], value)
+					if inCache {
+						cache.SetStorageWrite(stK, inc, stHash, value)
+					} else {
+						cache.SetStorageRead(stK, inc, stHash, value)
+					}
 				}
 			}
 			cache.TurnWritesToReads(cache.PrepareWrites())
@@ -441,24 +463,43 @@ func (p *Promoter) Unwind(logPrefix string, s *StageState, u *UnwindState, stora
 			return fmt.Errorf("%s: getting rewind data: %v", logPrefix, errRewind)
 		}
 		for key, value := range accountMap {
+			_, inCache := p.cache.GetAccount([]byte(key))
 			if len(value) > 0 {
 				var acc accounts.Account
 				if err := acc.DecodeForStorage(value); err != nil {
 					return err
 				}
 				recoverCodeHashPlain(&acc, p.db, key)
-				p.cache.SetAccountWrite([]byte(key), &acc)
+				if inCache {
+					p.cache.SetAccountWrite([]byte(key), &acc)
+				} else {
+					p.cache.SetAccountRead([]byte(key), &acc)
+				}
 			} else {
-				p.cache.SetAccountDelete([]byte(key))
+				if inCache {
+					p.cache.SetAccountDelete([]byte(key))
+				} else {
+					p.cache.SetAccountAbsent([]byte(key))
+				}
 			}
 		}
 
 		for key, value := range storageMap {
 			k := []byte(key)
+			stK, inc, stH := k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:]
+			_, inCache := p.cache.GetStorage(stK, inc, stH)
 			if len(value) > 0 {
-				p.cache.SetStorageWrite(k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:], value)
+				if inCache {
+					p.cache.SetStorageWrite(stK, inc, stH, value)
+				} else {
+					p.cache.SetStorageRead(stK, inc, stH, value)
+				}
 			} else {
-				p.cache.SetStorageDelete(k[:20], binary.BigEndian.Uint64(k[20:28]), k[28:])
+				if inCache {
+					p.cache.SetStorageDelete(stK, inc, stH)
+				} else {
+					p.cache.SetStorageAbsent(stK, inc, stH)
+				}
 			}
 		}
 		p.cache.TurnWritesToReads(p.cache.PrepareWrites())
