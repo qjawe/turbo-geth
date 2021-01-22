@@ -6,6 +6,7 @@ import (
 	"encoding/binary"
 	"errors"
 	"fmt"
+	"math/bits"
 	"os"
 	"sort"
 	"time"
@@ -117,7 +118,10 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 					return nil
 				}
 				newV := trie.IHTypedValue(hashes, rootHash)
-				fmt.Printf("collect: %x,%x\n", keyHex, newV)
+				if bits.OnesCount16(branches) != len(hashes)/common.HashLength {
+					fmt.Printf("11: %d,%d\n", bits.OnesCount16(branches), len(hashes)/common.HashLength)
+					panic(1)
+				}
 				cache.SetAccountHashWrite(keyHex, branches, children, newV)
 				return nil
 			}
@@ -136,7 +140,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 			if err := loader.Reset(unfurl, hashCollector, storageHashCollector, false); err != nil {
 				return err
 			}
-			_, err := loader.CalcTrieRootOnCache(db, []byte{uint8(i)}, cache, quit)
+			_, err := loader.CalcSubTrieRootOnCache(db, []byte{uint8(i)}, cache, quit)
 			if err != nil {
 				return err
 			}
@@ -150,7 +154,7 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 			return err
 		}
 		t := time.Now()
-		hash, err := loader.CalcTrieRootOnCache2(cache)
+		hash, err := loader.CalcTrieRootOnCache(cache)
 		if err != nil {
 			return err
 		}
@@ -435,6 +439,10 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 					return nil
 				}
 				newV := trie.IHTypedValue(hashes, rootHash)
+				if bits.OnesCount16(branches) != len(hashes)/common.HashLength {
+					fmt.Printf("11: %d,%d\n", bits.OnesCount16(branches), len(hashes)/common.HashLength)
+					panic(1)
+				}
 				cache.SetAccountHashWrite(keyHex, branches, children, newV)
 				return nil
 			}
@@ -453,7 +461,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 			if err := loader.Reset(unfurl, hashCollector, storageHashCollector, false); err != nil {
 				return err
 			}
-			_, err := loader.CalcTrieRootOnCache(db, []byte{uint8(i)}, cache, quit)
+			_, err := loader.CalcSubTrieRootOnCache(db, []byte{uint8(i)}, cache, quit)
 			if err != nil {
 				return err
 			}
@@ -468,7 +476,7 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 			return err
 		}
 		t := time.Now()
-		hash, err := loader.CalcTrieRootOnCache2(cache)
+		hash, err := loader.CalcTrieRootOnCache(cache)
 		if err != nil {
 			return err
 		}
@@ -652,6 +660,10 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 					cache.SetAccountHashDelete(keyHex)
 					return nil
 				}
+				if bits.OnesCount16(branches) != len(hashes)/common.HashLength {
+					fmt.Printf("11: %d,%d\n", bits.OnesCount16(branches), len(hashes)/common.HashLength)
+					panic(1)
+				}
 				cache.SetAccountHashWrite(keyHex, branches, children, trie.IHTypedValue(hashes, rootHash))
 				return nil
 			}
@@ -669,7 +681,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 			if err := loader.Reset(unfurl, hashCollector, storageHashCollector, false); err != nil {
 				return err
 			}
-			_, err := loader.CalcTrieRootOnCache(db, []byte{uint8(i)}, cache, quit)
+			_, err := loader.CalcSubTrieRootOnCache(db, []byte{uint8(i)}, cache, quit)
 			if err != nil {
 				return err
 			}
@@ -684,7 +696,7 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 			return err
 		}
 		t := time.Now()
-		hash, err := loader.CalcTrieRootOnCache2(cache)
+		hash, err := loader.CalcTrieRootOnCache(cache)
 		if err != nil {
 			return err
 		}

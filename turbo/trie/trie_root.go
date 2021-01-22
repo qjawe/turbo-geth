@@ -667,7 +667,7 @@ func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, prefix []byte, cac
 	return EmptyRoot, nil
 }
 
-func (l *FlatDBTrieLoader) CalcTrieRootOnCache(db ethdb.Database, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) (common.Hash, error) {
+func (l *FlatDBTrieLoader) CalcSubTrieRootOnCache(db ethdb.Database, prefix []byte, cache *shards.StateCache, quit <-chan struct{}) (common.Hash, error) {
 	var (
 		tx ethdb.Tx
 	)
@@ -715,12 +715,13 @@ func (l *FlatDBTrieLoader) CalcTrieRootOnCache(db ethdb.Database, prefix []byte,
 	return l.receiver.Root(), nil
 }
 
-func (l *FlatDBTrieLoader) CalcTrieRootOnCache2(cache *shards.StateCache) (common.Hash, error) {
-	fmt.Printf("CalcTrieRootOnCache2\n")
-	if err := cache.AccountHashes2(func(_ []byte) bool { return true }, []byte{}, func(ihK []byte, ihV common.Hash) error {
+func (l *FlatDBTrieLoader) CalcTrieRootOnCache(cache *shards.StateCache) (common.Hash, error) {
+	fmt.Printf("CalcTrieRootOnCache\n")
+	if err := cache.AccountHashes3(func(_ []byte) bool { return true }, []byte{}, func(ihK []byte, ihV common.Hash, skipState bool) error {
 		if len(ihK) == 0 { // Loop termination
 			return nil
 		}
+		fmt.Printf("1:%x\n", ihK)
 		if err := l.receiver.Receive(AHashStreamItem, ihK, nil, nil, nil, ihV[:], 0); err != nil {
 			return err
 		}

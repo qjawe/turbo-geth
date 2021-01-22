@@ -336,14 +336,12 @@ func (rh *ReadHeap) Push(x interface{}) {
 	// Push and Pop use pointer receivers because they modify the slice's length,
 	// not just its contents.
 	cacheItem := x.(CacheItem)
-	fmt.Printf("push: %d, %T\n", len(rh.items), x)
 	cacheItem.SetQueuePos(len(rh.items))
 	rh.items = append(rh.items, cacheItem)
 }
 
 func (rh *ReadHeap) Pop() interface{} {
 	cacheItem := rh.items[len(rh.items)-1]
-	fmt.Printf("pop: %d, %T\n", len(rh.items), cacheItem)
 	rh.items = rh.items[:len(rh.items)-1]
 	return cacheItem
 }
@@ -530,12 +528,14 @@ func (sc *StateCache) setRead(item CacheItem, absent bool) {
 	if sc.readSize+item.GetSize() > int(sc.limit) {
 		for sc.readQueuesLen() > 0 && sc.readSize+item.GetSize() > int(sc.limit) {
 			// Read queue cannot grow anymore, need to evict one element
+			fmt.Printf("before pop2: %d,%d\n", id, sc.readQueue[id].Len())
 			cacheItem := heap.Pop(&sc.readQueue[id]).(CacheItem)
 			sc.readSize -= cacheItem.GetSize()
 			sc.readWrites[id].Delete(cacheItem)
 		}
 	}
 	// Push new element on the read queue
+	fmt.Printf("before push2: %d,%d\n", id, sc.readQueue[id].Len())
 	heap.Push(&sc.readQueue[id], item)
 	sc.readWrites[id].ReplaceOrInsert(item)
 	sc.readSize += item.GetSize()
@@ -559,9 +559,6 @@ func (sc *StateCache) SetAccountRead(address []byte, account *accounts.Account) 
 	//nolint:errcheck
 	h.Sha.Read(ai.addrHash[:])
 	ai.account.Copy(account)
-	if bytes.Equal(common.FromHex("04fd958017be3b5f9b4c7169039e7990b35e6ebe1023d768c693be7b5be17950"), ai.addrHash.Bytes()) {
-		panic(1)
-	}
 	sc.setRead(&ai, false /* absent */)
 }
 
@@ -597,9 +594,6 @@ func (sc *StateCache) SetAccountAbsent(address []byte) {
 	h.Sha.Write(address)
 	//nolint:errcheck
 	h.Sha.Read(ai.addrHash[:])
-	if bytes.Equal(common.FromHex("04fd958017be3b5f9b4c7169039e7990b35e6ebe1023d768c693be7b5be17950"), ai.addrHash.Bytes()) {
-		panic(3)
-	}
 	sc.setRead(&ai, true /* absent */)
 }
 
@@ -628,10 +622,8 @@ func (sc *StateCache) setWrite(item CacheItem, writeItem CacheWriteItem, delete 
 		cacheItem := existing.(CacheItem)
 		// Remove seek the reads queue
 		if sc.readQueue[id].Len() > 0 {
-			fmt.Printf("remove: %d, %d, %T\n", id, cacheItem.GetQueuePos(), cacheItem)
-			fmt.Printf("before: %d\n", sc.readQueue[id].Len())
+			fmt.Printf("before remove: %d,%d\n", id, sc.readQueue[id].Len())
 			heap.Remove(&sc.readQueue[id], cacheItem.GetQueuePos())
-			fmt.Printf("after: %d\n", sc.readQueue[id].Len())
 		}
 		sc.readSize += item.GetSize()
 		sc.readSize -= cacheItem.GetSize()
@@ -981,13 +973,13 @@ func WalkWrites(
 
 func (sc *StateCache) TurnWritesToReads(writes [5]*btree.BTree) {
 	for i := 0; i < len(writes); i++ {
-		readQueue := sc.readQueue[i]
+		readQueue := &sc.readQueue[i]
 		writes[i].Ascend(func(it btree.Item) bool {
 			cacheWriteItem := it.(CacheWriteItem)
 			cacheItem := cacheWriteItem.GetCacheItem()
 			if !cacheItem.HasFlag(ModifiedFlag) {
 				// Cannot touch items that have been modified since we have taken away the writes
-				heap.Push(&readQueue, cacheItem)
+				heap.Push(readQueue, cacheItem)
 			}
 			return true
 		})

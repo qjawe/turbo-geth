@@ -415,6 +415,9 @@ GotItemFromCache:
 		}
 
 		for ; lvl > 0; lvl-- { // go to parent sibling in mem
+			//for i := lvl; i < len(hashID); i++ {
+			//	hashID[i] = 0
+			//}
 			cur = append(append(cur[:0], k[lvl]...), 0)
 			for id[lvl]++; id[lvl] <= maxID[lvl]; id[lvl]++ { // go to sibling
 				if !isChild() {
@@ -426,8 +429,10 @@ GotItemFromCache:
 					skipState = false
 					continue
 				}
+
 				hashID[lvl]++
 				if canUse(cur) {
+					fmt.Printf("3: %x, %d, %d\n", cur, len(hashes[lvl]), bits.OnesCount16(branch[lvl]))
 					if err := walker(cur, hashes[lvl][hashID[lvl]], skipState); err != nil {
 						return err
 					}
@@ -443,62 +448,11 @@ GotItemFromCache:
 			}
 		}
 
-		_ = dbutils.NextNibblesSubtree(k[1], &seek)
-		ihK, branches, children, _ = sc.AccountHashesSeek(seek)
-		//fmt.Printf("sibling: %x -> %x, %d, %d, %d\n", seek, ihK, lvl, id[lvl], maxID[lvl])
-	}
-	return nil
-}
-
-// [from:to)
-func (sc *StateCache) AccountHashes2(canUse func([]byte) bool, prefix []byte, walker func(prefix []byte, h common.Hash) error) error {
-	var cur, prev *AccountHashItem
-	id := id(cur)
-	seek := &AccountHashItem{addrHashPrefix: make([]byte, 0, 64)}
-	seek.addrHashPrefix = append(seek.addrHashPrefix[:0], prefix...)
-	step := func(i btree.Item) bool {
-		it := i.(*AccountHashItem)
-		if it.HasFlag(AbsentFlag) || it.HasFlag(DeletedFlag) {
-			return true
-		}
-		cur = it // found
-		return false
-	}
-	rw := sc.readWrites[id]
-	rw.AscendGreaterOrEqual(seek, step)
-	var ihK []byte
-	for {
-		if cur == nil {
-			break
-		}
-
-		if prefix != nil && !bytes.HasPrefix(cur.addrHashPrefix, prefix) {
-			break
-		}
-
-		for i, hashId := bits.TrailingZeros16(cur.branchChildren), 0; i < bits.Len16(cur.branchChildren); i++ {
-			if ((uint16(1) << i) & cur.branchChildren) == 0 {
-				continue
-			}
-			ihK = append(append(ihK[:0], cur.addrHashPrefix...), uint8(i))
-			if !canUse(ihK) {
-				continue
-			}
-			if err := walker(common.CopyBytes(ihK), cur.hashes[hashId]); err != nil {
-				return err
-			}
-			hashId++
-		}
-		prev = cur
-		cur = nil
-		ok := dbutils.NextNibblesSubtree(prev.addrHashPrefix, &seek.addrHashPrefix) // go to sibling
+		ok = dbutils.NextNibblesSubtree(k[1], &seek)
 		if !ok {
 			break
 		}
-		rw.AscendGreaterOrEqual(seek, step)
-	}
-	if err := walker(nil, common.Hash{}); err != nil {
-		return err
+		ihK, branches, children, hashItem = sc.AccountHashesSeek(seek)
 	}
 	return nil
 }
@@ -515,7 +469,11 @@ func (sc *StateCache) AccountHashesSeek(prefix []byte) ([]byte, uint16, uint16, 
 	id := id(seek)
 	seek.addrHashPrefix = append(seek.addrHashPrefix[:0], prefix...)
 	sc.readWrites[id].AscendGreaterOrEqual(seek, func(i btree.Item) bool {
-		cur = i.(*AccountHashItem) // found
+		it := i.(*AccountHashItem)
+		if it.HasFlag(AbsentFlag) || it.HasFlag(DeletedFlag) {
+			return true
+		}
+		cur = it // found
 		return false
 	})
 	if cur == nil {
@@ -532,14 +490,17 @@ func (sc *StateCache) StorageHashesSeek(addrHash common.Hash, incarnation uint64
 	seek.incarnation = incarnation
 	seek.locHashPrefix = prefix
 	sc.readWrites[id].AscendGreaterOrEqual(seek, func(i btree.Item) bool {
-		found := i.(*StorageHashItem)
-		if found.addrHash != addrHash {
+		it := i.(*StorageHashItem)
+		if it.HasFlag(AbsentFlag) || it.HasFlag(DeletedFlag) {
+			return true
+		}
+		if it.addrHash != addrHash {
 			return false
 		}
-		if found.incarnation != incarnation {
+		if it.incarnation != incarnation {
 			return false
 		}
-		cur = found
+		cur = it
 		return false
 	})
 	if cur == nil {
