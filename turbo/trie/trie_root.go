@@ -532,7 +532,10 @@ GotItemFromCache:
 			}
 		}
 
-		_ = dbutils.NextNibblesSubtree(k[1], &seek)
+		ok = dbutils.NextNibblesSubtree(k[1], &seek)
+		if !ok {
+			break
+		}
 		ihK, branches, children, hashItem = cache.AccountHashesSeek(seek)
 		//fmt.Printf("sibling: %x -> %x, %d, %d, %d\n", seek, ihK, lvl, id[lvl], maxID[lvl])
 	}
@@ -660,10 +663,17 @@ func (l *FlatDBTrieLoader) post(storages ethdb.CursorDupSort, prefix []byte, cac
 		return EmptyRoot, err
 	}
 
+	pref, br, ch, h, ook := cache.GetAccountHash(common.FromHex("05"))
+	fmt.Printf("fter a3lll post: %x,%x,%d,%d,%t\n", pref, bits.OnesCount16(br), len(h), bits.OnesCount16(ch), ook)
+
 	if err := l.receiver.Receive(CutoffStreamItem, nil, nil, nil, nil, nil, len(prefix)); err != nil {
 		return EmptyRoot, err
 	}
 	fmt.Printf("%d,%d,%d,%d\n", i1, i2, i3, i4)
+
+	pref, br, ch, h, ook = cache.GetAccountHash(common.FromHex("05"))
+	fmt.Printf("fter a2lll post: %x,%x,%d,%d,%t\n", pref, bits.OnesCount16(br), bits.OnesCount16(ch), len(h), ook)
+
 	return EmptyRoot, nil
 }
 
@@ -702,6 +712,8 @@ func (l *FlatDBTrieLoader) CalcSubTrieRootOnCache(db ethdb.Database, prefix []by
 	if err := l.prep(accsC, ihAccC, prefix, cache, quit); err != nil {
 		panic(err)
 	}
+	pref, br, _, h, ok := cache.GetAccountHash(common.FromHex("05"))
+	fmt.Printf("before post: %x,%x,%d,%t\n", pref, bits.OnesCount16(br), len(h), ok)
 	if _, err := l.post(ss, prefix, cache, quit); err != nil {
 		panic(err)
 	}
@@ -721,7 +733,7 @@ func (l *FlatDBTrieLoader) CalcTrieRootOnCache(cache *shards.StateCache) (common
 		if len(ihK) == 0 { // Loop termination
 			return nil
 		}
-		fmt.Printf("1:%x\n", ihK)
+		//fmt.Printf("1:%x\n", ihK)
 		if err := l.receiver.Receive(AHashStreamItem, ihK, nil, nil, nil, ihV[:], 0); err != nil {
 			return err
 		}

@@ -168,6 +168,8 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 		)
 		//_ = cache.DebugPrintAccounts()
 		writes := cache.PrepareWrites()
+		pref, br, _, h, ok := cache.GetAccountHash(common.FromHex("05"))
+		fmt.Printf("dlAlex: %x,%x,%d,%t\n", pref, bits.OnesCount16(br), len(h), ok)
 
 		shards.WalkAccountHashesWrites(writes, func(prefix []byte, branches, children uint16, h []common.Hash) {
 			newV := trie.MarshalIH(branches, children, h)
@@ -191,6 +193,8 @@ func RegenerateIntermediateHashes(logPrefix string, db ethdb.Database, checkRoot
 				panic(err)
 			}
 		})
+		pref, br, _, h, ok = cache.GetAccountHash(common.FromHex("05"))
+		fmt.Printf("dlAlex after: %x,%x,%d,%t\n", pref, bits.OnesCount16(br), len(h), ok)
 		cache.TurnWritesToReads(writes)
 	} else {
 		accountIHCollector := etl.NewCollector(tmpdir, etl.NewSortableBuffer(etl.BufferOptimalSize))
@@ -439,11 +443,14 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 					return nil
 				}
 				newV := trie.IHTypedValue(hashes, rootHash)
-				if bits.OnesCount16(branches) != len(hashes)/common.HashLength {
-					fmt.Printf("11: %d,%d\n", bits.OnesCount16(branches), len(hashes)/common.HashLength)
-					panic(1)
+				if bytes.HasPrefix(keyHex, common.FromHex("05")) {
+					fmt.Printf("55ll: %x,%b,%b, %d, %d\n", keyHex, branches, children, len(hashes)/common.HashLength, len(newV))
 				}
 				cache.SetAccountHashWrite(keyHex, branches, children, newV)
+				if bytes.HasPrefix(keyHex, common.FromHex("05")) {
+					pref, br, _, h, ok := cache.GetAccountHash(common.FromHex("05"))
+					fmt.Printf("66kll: %x,%x,%d,%t\n", pref, bits.OnesCount16(br), len(h), ok)
+				}
 				return nil
 			}
 			storageHashCollector := func(accWithInc []byte, keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error {
@@ -488,6 +495,8 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 			"root hash", hash.Hex(),
 			"gen IH", generationIHTook,
 		)
+		pref, br, _, h, ok := cache.GetAccountHash(common.FromHex("05"))
+		fmt.Printf("dlAlex: %x,%x,%d,%t\n", pref, bits.OnesCount16(br), len(h), ok)
 
 		writes := cache.PrepareWrites()
 		shards.WalkAccountHashesWrites(writes, func(prefix []byte, branches, children uint16, h []common.Hash) {
@@ -511,6 +520,8 @@ func incrementIntermediateHashes(logPrefix string, s *StageState, db ethdb.Datab
 				panic(err)
 			}
 		})
+		pref, br, _, h, ok = cache.GetAccountHash(common.FromHex("05"))
+		fmt.Printf("dlAlex after: %x,%x,%d,%t\n", pref, bits.OnesCount16(br), len(h), ok)
 		cache.TurnWritesToReads(writes)
 	} else {
 		sort.Slice(exclude, func(i, j int) bool { return bytes.Compare(exclude[i], exclude[j]) < 0 })
@@ -709,6 +720,8 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 			"gen IH", generationIHTook,
 		)
 
+		pref, br, _, h, ok := cache.GetAccountHash(common.FromHex("05"))
+		fmt.Printf("dlAlex: %x,%x,%d,%t\n", pref, bits.OnesCount16(br), len(h), ok)
 		writes := cache.PrepareWrites()
 		shards.WalkAccountHashesWrites(writes, func(prefix []byte, branches, children uint16, h []common.Hash) {
 			newV := trie.MarshalIH(branches, children, h)
@@ -731,6 +744,8 @@ func unwindIntermediateHashesStageImpl(logPrefix string, u *UnwindState, s *Stag
 				panic(err)
 			}
 		})
+		pref, br, _, h, ok = cache.GetAccountHash(common.FromHex("05"))
+		fmt.Printf("dlAlex after: %x,%x,%d,%t\n", pref, bits.OnesCount16(br), len(h), ok)
 		cache.TurnWritesToReads(writes)
 
 	} else {

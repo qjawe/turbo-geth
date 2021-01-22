@@ -47,8 +47,8 @@ type structInfoReceiver interface {
 type HashCollector func(keyHex []byte, hash []byte) error
 type StorageHashCollector func(accWithInc []byte, keyHex []byte, hash []byte) error
 
-type HashCollector2 func(keyHex []byte, set uint16, branchesSet uint16, hashes []byte, rootHash []byte) error
-type StorageHashCollector2 func(accWithInc []byte, keyHex []byte, set uint16, branchSet uint16, hashes []byte, rootHash []byte) error
+type HashCollector2 func(keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error
+type StorageHashCollector2 func(accWithInc []byte, keyHex []byte, children uint16, branches uint16, hashes []byte, rootHash []byte) error
 
 func calcPrecLen(groups []uint16) int {
 	if len(groups) == 0 {

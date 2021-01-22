@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"container/heap"
 	"fmt"
+	"math/bits"
 	"unsafe"
 
 	"github.com/c2h5oh/datasize"
@@ -512,6 +513,11 @@ func (sc *StateCache) GetCode(address []byte, incarnation uint64) ([]byte, bool)
 }
 
 func (sc *StateCache) setRead(item CacheItem, absent bool) {
+	if ii, ok := item.(*AccountHashItem); ok {
+		if bits.OnesCount16(ii.branches) != len(ii.hashes) {
+			panic(2)
+		}
+	}
 	id := id(item)
 	if sc.readWrites[id].Get(item) != nil {
 		panic(fmt.Sprintf("item must not be present in the cache before doing setRead: %s", item))
@@ -528,14 +534,12 @@ func (sc *StateCache) setRead(item CacheItem, absent bool) {
 	if sc.readSize+item.GetSize() > int(sc.limit) {
 		for sc.readQueuesLen() > 0 && sc.readSize+item.GetSize() > int(sc.limit) {
 			// Read queue cannot grow anymore, need to evict one element
-			fmt.Printf("before pop2: %d,%d\n", id, sc.readQueue[id].Len())
 			cacheItem := heap.Pop(&sc.readQueue[id]).(CacheItem)
 			sc.readSize -= cacheItem.GetSize()
 			sc.readWrites[id].Delete(cacheItem)
 		}
 	}
 	// Push new element on the read queue
-	fmt.Printf("before push2: %d,%d\n", id, sc.readQueue[id].Len())
 	heap.Push(&sc.readQueue[id], item)
 	sc.readWrites[id].ReplaceOrInsert(item)
 	sc.readSize += item.GetSize()
@@ -598,6 +602,16 @@ func (sc *StateCache) SetAccountAbsent(address []byte) {
 }
 
 func (sc *StateCache) setWrite(item CacheItem, writeItem CacheWriteItem, delete bool) {
+	if ii, ok := item.(*AccountHashItem); ok {
+		if bits.OnesCount16(ii.branches) != len(ii.hashes) {
+			panic(2)
+		}
+	}
+	if ii, ok := writeItem.(*AccountHashWriteItem); ok {
+		if bits.OnesCount16(ii.ai.branches) != len(ii.ai.hashes) {
+			panic(2)
+		}
+	}
 	id := id(item)
 	// Check if this is going to be modification of the existing entry
 	if existing := sc.writes[id].Get(writeItem); existing != nil {
@@ -622,7 +636,6 @@ func (sc *StateCache) setWrite(item CacheItem, writeItem CacheWriteItem, delete 
 		cacheItem := existing.(CacheItem)
 		// Remove seek the reads queue
 		if sc.readQueue[id].Len() > 0 {
-			fmt.Printf("before remove: %d,%d\n", id, sc.readQueue[id].Len())
 			heap.Remove(&sc.readQueue[id], cacheItem.GetQueuePos())
 		}
 		sc.readSize += item.GetSize()
