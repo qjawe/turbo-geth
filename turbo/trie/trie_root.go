@@ -1669,15 +1669,21 @@ func UnmarshalIH(v []byte) (uint16, uint16, []common.Hash) {
 	for i := 0; i < len(newV); i++ {
 		newV[i].SetBytes(v[i*common.HashLength : (i+1)*common.HashLength])
 	}
+	if bits.OnesCount16(branches) != len(newV) {
+		panic(1)
+	}
 	return branches, children, newV
 }
 
-func MarshalIH(branchChildren, children uint16, h []common.Hash) []byte {
+func MarshalIH(branches, children uint16, h []common.Hash) []byte {
 	v := make([]byte, len(h)*common.HashLength+4)
-	binary.BigEndian.PutUint16(v, branchChildren)
+	binary.BigEndian.PutUint16(v, branches)
 	binary.BigEndian.PutUint16(v[2:], children)
 	for i := 0; i < len(h); i++ {
 		copy(v[4+i*common.HashLength:4+(i+1)*common.HashLength], h[i].Bytes())
+	}
+	if bits.OnesCount16(branches) != len(h) {
+		panic(1)
 	}
 	return v
 }
@@ -1686,15 +1692,18 @@ func IHStorageKey(addressHash []byte, incarnation uint64, prefix []byte) []byte 
 	return dbutils.GenerateCompositeStoragePrefix(addressHash, incarnation, prefix)
 }
 
-func IHValue(children, branchChildren uint16, hashes []byte, rootHash []byte, buf []byte) []byte {
+func IHValue(children, branches uint16, hashes []byte, rootHash []byte, buf []byte) []byte {
 	buf = buf[:len(hashes)+len(rootHash)+4]
-	binary.BigEndian.PutUint16(buf, branchChildren)
+	binary.BigEndian.PutUint16(buf, branches)
 	binary.BigEndian.PutUint16(buf[2:], children)
 	if len(rootHash) == 0 {
 		copy(buf[4:], hashes)
 	} else {
 		copy(buf[4:], rootHash)
 		copy(buf[36:], hashes)
+	}
+	if bits.OnesCount16(branches) != len(hashes)/common.HashLength {
+		panic(1)
 	}
 	return buf
 }

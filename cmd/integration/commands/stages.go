@@ -701,16 +701,6 @@ func newSync(quitCh <-chan struct{}, db ethdb.Database, tx ethdb.Database, hook 
 		}); err != nil {
 			panic(err)
 		}
-		if err := db.Walk(dbutils.PlainStateBucket, nil, 0, func(k, v []byte) (bool, error) {
-			if len(k) > 2 {
-				return true, nil
-			}
-			branches, children, hashes := trie.UnmarshalIH(v)
-			cache.SetAccountHashesRead(k, branches, children, hashes)
-			return true, nil
-		}); err != nil {
-			panic(err)
-		}
 	}
 	st, err := stagedsync.New(
 		stagedsync.DefaultStages(),
