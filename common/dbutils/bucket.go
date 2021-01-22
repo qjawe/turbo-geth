@@ -23,7 +23,7 @@ var (
 			  value - storage value(common.hash)
 
 		Physical layout:
-			PlainStateBucket and CurrentStateBucket utilises DupSort feature of LMDB (store multiple values inside 1 key).
+			PlainStateBucket and HashedStorageBucket utilises DupSort feature of LMDB (store multiple values inside 1 key).
 		-------------------------------------------------------------
 			   key              |            value
 		-------------------------------------------------------------
@@ -61,8 +61,10 @@ var (
 	// Contains Storage:
 	//key - address hash + incarnation + storage key hash
 	//value - storage value(common.hash)
-	CurrentStateBucket     = "CST2"
+	CurrentStateBucketOld2 = "CST2"
 	CurrentStateBucketOld1 = "CST"
+	HashedAccountsBucket   = "hashed_accounts"
+	HashedStorageBucket    = "hashed_storage"
 
 	//key - address hash
 	//value - list of block where it's changed
@@ -96,8 +98,10 @@ var (
 	StorageChangeSetBucket = "SCS"
 
 	// some_prefix_of(hash_of_address_of_account) => hash_of_subtrie
-	IntermediateTrieHashBucket     = "iTh2"
+	TrieOfAccountsBucket           = "trie_account"
+	TrieOfStorageBucket            = "trie_storage"
 	IntermediateTrieHashBucketOld1 = "iTh"
+	IntermediateTrieHashBucketOld2 = "iTh2"
 
 	// DatabaseInfoBucket is used to store information about data layout.
 	DatabaseInfoBucket        = "DBINFO"
@@ -207,14 +211,11 @@ var (
 // This list will be sorted in `init` method.
 // BucketsConfigs - can be used to find index in sorted version of Buckets list by name
 var Buckets = []string{
-	CurrentStateBucket,
+	CurrentStateBucketOld2,
 	AccountsHistoryBucket,
 	StorageHistoryBucket,
 	CodeBucket,
 	ContractCodeBucket,
-	AccountChangeSetBucket,
-	StorageChangeSetBucket,
-	IntermediateTrieHashBucket,
 	DatabaseVerisionKey,
 	HeaderPrefix,
 	HeaderNumberPrefix,
@@ -251,6 +252,10 @@ var Buckets = []string{
 	Log,
 	Sequence,
 	EthTx,
+	TrieOfAccountsBucket,
+	TrieOfStorageBucket,
+	HashedAccountsBucket,
+	HashedStorageBucket,
 }
 
 // DeprecatedBuckets - list of buckets which can be programmatically deleted - for example after migration
@@ -260,6 +265,7 @@ var DeprecatedBuckets = []string{
 	CurrentStateBucketOld1,
 	PlainStateBucketOld1,
 	IntermediateTrieHashBucketOld1,
+	IntermediateTrieHashBucketOld2,
 }
 
 type CustomComparator string
@@ -317,7 +323,13 @@ type BucketConfigItem struct {
 }
 
 var BucketsConfigs = BucketsCfg{
-	CurrentStateBucket: {
+	CurrentStateBucketOld2: {
+		Flags:                     DupSort,
+		AutoDupSortKeysConversion: true,
+		DupFromLen:                72,
+		DupToLen:                  40,
+	},
+	HashedStorageBucket: {
 		Flags:                     DupSort,
 		AutoDupSortKeysConversion: true,
 		DupFromLen:                72,
@@ -335,13 +347,17 @@ var BucketsConfigs = BucketsCfg{
 	StorageChangeSetBucket: {
 		Flags: DupSort,
 	},
+	//TrieOfStorageBucket: {
+	//	Flags:               DupSort,
+	//	CustomDupComparator: DupCmpSuffix32,
+	//},
 	PlainStateBucket: {
 		Flags:                     DupSort,
 		AutoDupSortKeysConversion: true,
 		DupFromLen:                60,
 		DupToLen:                  28,
 	},
-	IntermediateTrieHashBucket: {
+	IntermediateTrieHashBucketOld2: {
 		Flags:               DupSort,
 		CustomDupComparator: DupCmpSuffix32,
 	},

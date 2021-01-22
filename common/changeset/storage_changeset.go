@@ -79,34 +79,9 @@ func (b StorageChangeSetPlain) FindWithoutIncarnation(blockNumber uint64, addres
 	return findWithoutIncarnationInStorageChangeSet2(b.c, blockNumber, common.AddressLength, addressToFind, keyToFind)
 }
 
-// RewindData generates rewind data for all buckets between the timestamp
-// timestapSrc is the current timestamp, and timestamp Dst is where we rewind
-func RewindData(db ethdb.Getter, timestampSrc, timestampDst uint64) (map[string][]byte, map[string][]byte, error) {
-	// Collect list of buckets and keys that need to be considered
-	collector := newRewindDataCollector()
-
-	if err := walkAndCollect(
-		collector.AccountWalker,
-		db, dbutils.AccountChangeSetBucket,
-		timestampDst+1, timestampSrc,
-	); err != nil {
-		return nil, nil, err
-	}
-
-	if err := walkAndCollect(
-		collector.StorageWalker,
-		db, dbutils.StorageChangeSetBucket,
-		timestampDst+1, timestampSrc,
-	); err != nil {
-		return nil, nil, err
-	}
-
-	return collector.AccountData, collector.StorageData, nil
-}
-
 // RewindDataPlain generates rewind data for all plain buckets between the timestamp
 // timestapSrc is the current timestamp, and timestamp Dst is where we rewind
-func RewindDataPlain(db ethdb.Getter, timestampSrc, timestampDst uint64) (map[string][]byte, map[string][]byte, error) {
+func RewindData(db ethdb.Getter, timestampSrc, timestampDst uint64) (map[string][]byte, map[string][]byte, error) {
 	// Collect list of buckets and keys that need to be considered
 	collector := newRewindDataCollector()
 

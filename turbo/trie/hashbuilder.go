@@ -37,6 +37,8 @@ type HashBuilder struct {
 	b         [1]byte   // Buffer for single byte
 	prefixBuf [8]byte
 	trace     bool // Set to true when HashBuilder is required to print trace information for diagnostics
+
+	topHashesCopy []byte
 }
 
 // NewHashBuilder creates a new HashBuilder
@@ -56,6 +58,7 @@ func (hb *HashBuilder) Reset() {
 	if len(hb.nodeStack) > 0 {
 		hb.nodeStack = hb.nodeStack[:0]
 	}
+	hb.topHashesCopy = hb.topHashesCopy[:0]
 }
 
 func (hb *HashBuilder) leaf(length int, keyHex []byte, val rlphacks.RlpSerializable) error {
@@ -594,6 +597,49 @@ func (hb *HashBuilder) rootHash() common.Hash {
 
 func (hb *HashBuilder) topHash() []byte {
 	return hb.hashStack[len(hb.hashStack)-hashStackStride+1:]
+}
+
+func (hb *HashBuilder) printTopHashes(prefix []byte, set uint16, branchSet uint16) {
+	digits := bits.OnesCount16(set)
+	hashes := hb.hashStack[len(hb.hashStack)-hashStackStride*digits:]
+	var i int
+	for digit := uint(0); digit < 16; digit++ {
+		if ((uint16(1) << digit) & set) != 0 {
+			fmt.Printf("topHash: %x%02x, %x\n", prefix, digit, hashes[hashStackStride*i+1:hashStackStride*(i+1)])
+			i++
+		}
+	}
+}
+
+func (hb *HashBuilder) topHashes(prefix []byte, children uint16, branches uint16) []byte {
+	digits := bits.OnesCount16(children)
+	hashes := hb.hashStack[len(hb.hashStack)-hashStackStride*digits:]
+	hb.topHashesCopy = hb.topHashesCopy[:0]
+
+	for i := 0; branches > 0; children, branches = children>>1, branches>>1 {
+		if 1&children == 0 {
+			continue
+		}
+
+		if 1&branches != 0 {
+			hb.topHashesCopy = append(hb.topHashesCopy, hashes[hashStackStride*i+1:hashStackStride*(i+1)]...)
+		}
+		i++
+	}
+	//var i int
+	//for digit := uint(0); digit < 16; digit++ {
+	//	if ((uint16(1) << digit) & children) == 0 {
+	//		continue
+	//	}
+	//
+	//	if ((uint16(1) << digit) & branches) != 0 {
+	//		hb.topHashesCopy = append(hb.topHashesCopy, hashes[hashStackStride*i+1:hashStackStride*(i+1)]...)
+	//		//fmt.Printf("branch topHash: %x%02x, %x\n", prefix, digit, hashes[hashStackStride*i+1:hashStackStride*(i+1)])
+	//	}
+	//	i++
+	//}
+
+	return hb.topHashesCopy
 }
 
 func (hb *HashBuilder) root() node {
