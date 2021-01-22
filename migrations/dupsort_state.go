@@ -90,10 +90,13 @@ var dupSortIH = Migration{
 	Name: "dupsort_intermediate_trie_hashes",
 	Up: func(db ethdb.Database, tmpdir string, progress []byte, OnLoadCommit etl.LoadCommitHandler) error {
 		if err := db.(ethdb.BucketsMigrator).ClearBuckets(
-			dbutils.IntermediateTrieHashBucketOld2,
-			dbutils.IntermediateTrieHashBucketOld1,
 			dbutils.TrieOfStorageBucket,
 			dbutils.TrieOfAccountsBucket); err != nil {
+			return err
+		}
+		if err := db.(ethdb.BucketsMigrator).DropBuckets(
+			dbutils.IntermediateTrieHashBucketOld2,
+			dbutils.IntermediateTrieHashBucketOld1); err != nil {
 			return err
 		}
 		if err := stages.SaveStageProgress(db, stages.IntermediateHashes, 0); err != nil {
