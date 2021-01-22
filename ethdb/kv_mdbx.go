@@ -171,6 +171,7 @@ func (opts MdbxOpts) Open() (KV, error) {
 				if cfg.IsDeprecated {
 					continue
 				}
+				fmt.Printf("aaa: %s\n", name)
 				if err := tx.(BucketMigrator).CreateBucket(name); err != nil {
 					return err
 				}
