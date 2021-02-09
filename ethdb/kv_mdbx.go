@@ -38,7 +38,7 @@ type MdbxOpts struct {
 func NewMDBX() MdbxOpts {
 	return MdbxOpts{
 		bucketsCfg: DefaultBucketConfigs,
-		flags:      mdbx.NoReadahead | mdbx.Coalesce | mdbx.Durable, // | mdbx.LifoReclaim,
+		flags:      mdbx.NoReadahead | mdbx.Durable, // | mdbx.LifoReclaim,
 	}
 }
 
@@ -88,6 +88,11 @@ func (opts MdbxOpts) Open() (KV, error) {
 	}
 
 	err = env.SetOption(mdbx.OptRpAugmentLimit, 16*1024*1024)
+	if err != nil {
+		return nil, err
+	}
+
+	err = env.SetOption(mdbx.OptDpReverseLimit, 4*1024) // default: 1024
 	if err != nil {
 		return nil, err
 	}
@@ -610,7 +615,7 @@ func (tx *MdbxTx) Commit(ctx context.Context) error {
 	}()
 	tx.closeCursors()
 
-	slowTx := 10 * time.Second
+	slowTx := 1 * time.Second
 	if debug.SlowCommit() > 0 {
 		slowTx = debug.SlowCommit()
 	}
