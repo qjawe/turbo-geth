@@ -148,6 +148,7 @@ func (opts MdbxOpts) Open() (KV, error) {
 	if err != nil {
 		return nil, fmt.Errorf("%w, path: %s", err, opts.path)
 	}
+
 	err = env.SetOption(mdbx.OptRpAugmentLimit, 32*1024*1024)
 	if err != nil {
 		return nil, err
