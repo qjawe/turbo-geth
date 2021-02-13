@@ -189,7 +189,7 @@ func DefaultStages() StageBuilders {
 							})
 					},
 					UnwindFunc: func(u *UnwindState, s *StageState) error {
-						return UnwindExecutionStage(u, s, world.TX, world.storageMode.Receipts)
+						return UnwindExecutionStage(u, s, world.TX, world.storageMode.Receipts, world.QuitCh)
 					},
 				}
 			},
