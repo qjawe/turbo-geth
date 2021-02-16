@@ -8347,6 +8347,7 @@ static __cold int mdbx_set_readahead(MDBX_env *env, const size_t offset,
               bytes2pgno(env, offset), bytes2pgno(env, offset + length));
 
 #if defined(F_RDAHEAD)
+  mdbx_notice("readahead: F_RDAHEAD branch %d", enable);
   if (unlikely(fcntl(env->me_lazy_fd, F_RDAHEAD, enable) == -1))
     return errno;
 #endif /* F_RDAHEAD */
@@ -8356,16 +8357,19 @@ static __cold int mdbx_set_readahead(MDBX_env *env, const size_t offset,
     struct radvisory hint;
     hint.ra_offset = offset;
     hint.ra_count = length;
+      mdbx_notice("readahead: F_RDADVISE enable branch %d", enable);
     (void)/* Ignore ENOTTY for DB on the ram-disk and so on */ fcntl(
         env->me_lazy_fd, F_RDADVISE, &hint);
 #endif /* F_RDADVISE */
 #if defined(MADV_WILLNEED)
+      mdbx_notice("readahead: MADV_WILLNEED enable branch %d", enable);
     int err = madvise(env->me_map + offset, length, MADV_WILLNEED)
                   ? ignore_enosys(errno)
                   : MDBX_SUCCESS;
     if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #elif defined(POSIX_MADV_WILLNEED)
+      mdbx_notice("readahead: POSIX_MADV_WILLNEED enable branch %d", enable);
     int err = ignore_enosys(
         posix_madvise(env->me_map + offset, length, POSIX_MADV_WILLNEED));
     if (unlikely(MDBX_IS_ERROR(err)))
@@ -8385,17 +8389,20 @@ static __cold int mdbx_set_readahead(MDBX_env *env, const size_t offset,
 #endif /* MADV_WILLNEED */
   } else {
 #if defined(MADV_RANDOM)
+      mdbx_notice("readahead: MADV_RANDOM branch %d", enable);
     int err = madvise(env->me_map + offset, length, MADV_RANDOM)
                   ? ignore_enosys(errno)
                   : MDBX_SUCCESS;
     if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #elif defined(POSIX_MADV_RANDOM)
+    mdbx_notice("readahead: POSIX_MADV_RANDOM branch %d", enable);
     int err = ignore_enosys(
         posix_madvise(env->me_map + offset, length, POSIX_MADV_RANDOM));
     if (unlikely(MDBX_IS_ERROR(err)))
       return err;
 #elif defined(POSIX_FADV_RANDOM)
+      mdbx_notice("readahead: POSIX_FADV_RANDOM branch %d", enable);
     int err = ignore_enosys(
         posix_fadvise(env->me_lazy_fd, offset, length, POSIX_FADV_RANDOM));
     if (unlikely(MDBX_IS_ERROR(err)))
