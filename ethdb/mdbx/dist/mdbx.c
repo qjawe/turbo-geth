@@ -14593,6 +14593,7 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
 #endif
   if (avail_ram_pages < 1)
     return MDBX_ENOSYS;
+  mdbx_notice("is_readahead_reasonable: avail_ram_pages=%d", avail_ram_pages);
 
   return (volume_pages + redundancy_pages >= avail_ram_pages)
              ? MDBX_RESULT_FALSE
