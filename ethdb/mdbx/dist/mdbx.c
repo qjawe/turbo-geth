@@ -14591,7 +14591,7 @@ __cold int mdbx_is_readahead_reasonable(size_t volume, intptr_t redundancy) {
 #else
 #error "FIXME: Get Available RAM"
 #endif
-  mdbx_notice("is_readahead_reasonable: avail_ram_pages=%d", avail_ram_pages);
+  mdbx_notice("is_readahead_reasonable: avail_ram_pages=%ld", avail_ram_pages);
   if (avail_ram_pages < 1)
     return MDBX_ENOSYS;
 
