@@ -395,9 +395,6 @@ func (env *Env) UnsetFlags(flags uint) error {
 	return operrno("mdbx_env_set_flags", ret)
 }
 
-// Flags returns the flags set in the environment.
-//
-// See mdbx_env_get_flags.
 func (env *Env) Flags() (uint, error) {
 	var _flags C.uint
 	ret := C.mdbx_env_get_flags(env._env, &_flags)
