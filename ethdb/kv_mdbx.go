@@ -92,7 +92,7 @@ func (opts MdbxOpts) Open() (KV, error) {
 		return nil, err
 	}
 
-	_ = env.SetDebug(mdbx.LogLvlDebug, mdbx.DbgDoNotChange, mdbx.LoggerDoNotChange) // temporary disable error, because it works if call it 1 time, but returns error if call it twice in same process (what often happening in tests)
+	_ = env.SetDebug(mdbx.LogLvlExtra, mdbx.DbgDoNotChange, mdbx.LoggerDoNotChange) // temporary disable error, because it works if call it 1 time, but returns error if call it twice in same process (what often happening in tests)
 
 	err = env.SetMaxDBs(100)
 	if err != nil {
@@ -144,23 +144,19 @@ func (opts MdbxOpts) Open() (KV, error) {
 	// 1/8 is good for transactions with a lot of modifications - to reduce invalidation size.
 	// But TG app now using Batch and etl.Collectors to avoid writing to DB frequently changing data.
 	// It means most of our writes are: APPEND or "single UPSERT per key during transaction"
-	err = env.SetOption(mdbx.OptSpillMinDenominator, 1)
-	if err != nil {
+	if err = env.SetOption(mdbx.OptSpillMinDenominator, 1); err != nil {
 		return nil, err
 	}
-
-	err = env.SetOption(mdbx.OptSpillMaxDenominator, 0)
-	if err != nil {
+	if err = env.SetOption(mdbx.OptSpillMaxDenominator, 0); err != nil {
 		return nil, err
 	}
-
-	//err = env.SetOption(mdbx.OptDpReverseLimit, 8*1024)
-	//if err != nil {
-	//	return nil, err
-	//}
-
-	err = env.SetOption(mdbx.OptTxnDpLimit, 128*1024)
-	if err != nil {
+	if err = env.SetOption(mdbx.OptTxnDpInitial, 64*1024); err != nil {
+		return nil, err
+	}
+	if err = env.SetOption(mdbx.OptDpReverseLimit, 64*1024); err != nil {
+		return nil, err
+	}
+	if err = env.SetOption(mdbx.OptTxnDpLimit, 64*1024); err != nil {
 		return nil, err
 	}
 

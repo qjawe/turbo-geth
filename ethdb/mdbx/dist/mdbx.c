@@ -6332,6 +6332,7 @@ static MDBX_dpl *mdbx_dpl_reserve(MDBX_txn *txn, size_t size) {
   mdbx_tassert(txn,
                txn->tw.dirtylist == NULL || txn->tw.dirtylist->length <= size);
   size_t bytes = dpl2bytes((size < MDBX_PGL_LIMIT) ? size : MDBX_PGL_LIMIT);
+    mdbx_notice("mdbx_dpl_reserve: realloc %zu", size);
   MDBX_dpl *const dl = mdbx_realloc(txn->tw.dirtylist, bytes);
   if (likely(dl)) {
 #if __GLIBC_PREREQ(2, 12) || defined(__FreeBSD__) || defined(malloc_usable_size)
