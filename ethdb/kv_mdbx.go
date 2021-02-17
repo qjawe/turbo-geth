@@ -141,6 +141,21 @@ func (opts MdbxOpts) Open() (KV, error) {
 		return nil, fmt.Errorf("%w, path: %s", err, opts.path)
 	}
 
+	err = env.SetOption(mdbx.OptSpillMinDenominator, 4)
+	if err != nil {
+		return nil, err
+	}
+
+	err = env.SetOption(mdbx.OptDpReverseLimit, 4*1024)
+	if err != nil {
+		return nil, err
+	}
+
+	//err = env.SetOption(mdbx.OptTxnDpLimit, 2*65536)
+	//if err != nil {
+	//	return nil, err
+	//}
+
 	db := &MdbxKV{
 		opts:    opts,
 		env:     env,
