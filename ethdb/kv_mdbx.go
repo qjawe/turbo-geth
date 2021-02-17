@@ -141,20 +141,23 @@ func (opts MdbxOpts) Open() (KV, error) {
 		return nil, fmt.Errorf("%w, path: %s", err, opts.path)
 	}
 
+	// 1/8 is good for transactions with a lot of modifications - to reduce invalidation size.
+	// But TG app now using Batch and etl.Collectors to avoid writing to DB frequently changing data.
+	// It means most of our writes are: APPEND or "single UPSERT per key during transaction"
 	err = env.SetOption(mdbx.OptSpillMinDenominator, 4)
 	if err != nil {
 		return nil, err
 	}
 
-	err = env.SetOption(mdbx.OptDpReverseLimit, 4*1024)
+	err = env.SetOption(mdbx.OptDpReverseLimit, 8*1024)
 	if err != nil {
 		return nil, err
 	}
 
-	//err = env.SetOption(mdbx.OptTxnDpLimit, 2*65536)
-	//if err != nil {
-	//	return nil, err
-	//}
+	err = env.SetOption(mdbx.OptTxnDpLimit, 128*1024)
+	if err != nil {
+		return nil, err
+	}
 
 	db := &MdbxKV{
 		opts:    opts,
