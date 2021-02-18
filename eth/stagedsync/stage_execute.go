@@ -73,7 +73,7 @@ func executeBlockWithGo(block *types.Block, tx ethdb.DbWithPendingMutations, cac
 	var stateWriter state.WriterWithChangeSets
 
 	if params.ReaderBuilder != nil {
-		stateReader = params.ReaderBuilder(batch)
+		stateReader = params.ReaderBuilder(tx)
 	} else {
 		stateReader = state.NewPlainStateReader(tx)
 	}
@@ -84,7 +84,7 @@ func executeBlockWithGo(block *types.Block, tx ethdb.DbWithPendingMutations, cac
 	if params.WriterBuilder != nil {
 		stateWriter = params.WriterBuilder(tx, tx, blockNum)
 	} else if cache == nil {
-		stateWriter = state.NewPlainStateWriter(tx, batch, blockNum)
+		stateWriter = state.NewPlainStateWriter(tx, tx, blockNum)
 	} else {
 		stateWriter = state.NewCachedWriter(state.NewChangeSetWriterPlain(tx, blockNum), cache)
 	}
@@ -98,7 +98,7 @@ func executeBlockWithGo(block *types.Block, tx ethdb.DbWithPendingMutations, cac
 	}
 
 	if params.WriteReceipts {
-		if err = rawdb.AppendReceipts(batch, blockNum, receipts); err != nil {
+		if err = rawdb.AppendReceipts(tx, blockNum, receipts); err != nil {
 			return err
 		}
 	}
