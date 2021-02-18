@@ -151,13 +151,13 @@ func (opts MdbxOpts) Open() (KV, error) {
 	//	return nil, err
 	//}
 
-	if err = env.SetOption(mdbx.OptTxnDpInitial, 128*1024); err != nil {
+	if err = env.SetOption(mdbx.OptTxnDpInitial, 512*1024); err != nil {
 		return nil, err
 	}
-	if err = env.SetOption(mdbx.OptDpReverseLimit, 128*1024); err != nil {
+	if err = env.SetOption(mdbx.OptDpReverseLimit, 512*1024); err != nil {
 		return nil, err
 	}
-	if err = env.SetOption(mdbx.OptTxnDpLimit, 128*1024); err != nil {
+	if err = env.SetOption(mdbx.OptTxnDpLimit, 512*1024); err != nil {
 		return nil, err
 	}
 

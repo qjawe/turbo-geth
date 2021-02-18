@@ -75,18 +75,18 @@ func executeBlockWithGo(block *types.Block, tx ethdb.DbWithPendingMutations, cac
 	if params.ReaderBuilder != nil {
 		stateReader = params.ReaderBuilder(batch)
 	} else {
-		stateReader = state.NewPlainStateReader(batch)
+		stateReader = state.NewPlainStateReader(tx)
 	}
 	if cache != nil {
 		stateReader = state.NewCachedReader(stateReader, cache)
 	}
 
 	if params.WriterBuilder != nil {
-		stateWriter = params.WriterBuilder(batch, tx, blockNum)
+		stateWriter = params.WriterBuilder(tx, tx, blockNum)
 	} else if cache == nil {
-		stateWriter = state.NewPlainStateWriter(batch, batch, blockNum)
+		stateWriter = state.NewPlainStateWriter(tx, batch, blockNum)
 	} else {
-		stateWriter = state.NewCachedWriter(state.NewChangeSetWriterPlain(batch, blockNum), cache)
+		stateWriter = state.NewCachedWriter(state.NewChangeSetWriterPlain(tx, blockNum), cache)
 	}
 
 	engine := chainContext.Engine()
