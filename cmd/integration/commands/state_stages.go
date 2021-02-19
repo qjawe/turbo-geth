@@ -355,6 +355,7 @@ func loopExec(db ethdb.Database, ctx context.Context, unwind uint64) error {
 	if err != nil {
 		return err
 	}
+	_ = tx.(ethdb.BucketsMigrator).ClearBuckets(dbutils.BlockReceiptsPrefix, dbutils.Log)
 
 	_ = clearUnwindStack(tx, context.Background())
 	_ = tx.CommitAndBegin(ctx)
