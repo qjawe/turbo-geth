@@ -225,7 +225,7 @@ func MultiPut(tx Tx, tuples ...[]byte) error {
 }
 
 func (m *TxDb) BatchSize() int {
-	return int(m.len)
+	return int(m.tx.(*MdbxTx).DirtySize())
 }
 
 // IdealBatchSize defines the size of the data batches should ideally add in one write.

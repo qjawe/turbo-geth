@@ -73,20 +73,20 @@ func executeBlockWithGo(block *types.Block, tx ethdb.DbWithPendingMutations, cac
 	var stateWriter state.WriterWithChangeSets
 
 	if params.ReaderBuilder != nil {
-		stateReader = params.ReaderBuilder(tx)
+		stateReader = params.ReaderBuilder(batch)
 	} else {
-		stateReader = state.NewPlainStateReader(tx)
+		stateReader = state.NewPlainStateReader(batch)
 	}
 	if cache != nil {
 		stateReader = state.NewCachedReader(stateReader, cache)
 	}
 
 	if params.WriterBuilder != nil {
-		stateWriter = params.WriterBuilder(tx, tx, blockNum)
+		stateWriter = params.WriterBuilder(batch, tx, blockNum)
 	} else if cache == nil {
-		stateWriter = state.NewPlainStateWriter(tx, tx, blockNum)
+		stateWriter = state.NewPlainStateWriter(batch, batch, blockNum)
 	} else {
-		stateWriter = state.NewCachedWriter(state.NewChangeSetWriterPlain(tx, blockNum), cache)
+		stateWriter = state.NewCachedWriter(state.NewChangeSetWriterPlain(batch, blockNum), cache)
 	}
 
 	engine := chainContext.Engine()
@@ -98,7 +98,7 @@ func executeBlockWithGo(block *types.Block, tx ethdb.DbWithPendingMutations, cac
 	}
 
 	if params.WriteReceipts {
-		if err = rawdb.AppendReceipts(tx, blockNum, receipts); err != nil {
+		if err = rawdb.AppendReceipts(batch, blockNum, receipts); err != nil {
 			return err
 		}
 	}
@@ -154,8 +154,9 @@ func SpawnExecuteBlocksStage(s *StageState, stateDB ethdb.Database, chainConfig 
 	var batch ethdb.DbWithPendingMutations
 	useBatch := !useSilkworm && params.CacheSize == 0
 	if useBatch {
-		batch = tx.NewBatch()
-		defer batch.Rollback()
+		batch = tx
+		//batch = tx.NewBatch()
+		//defer batch.Rollback()
 	}
 	if !useSilkworm && params.CacheSize > 0 {
 		batch = tx
@@ -204,9 +205,9 @@ func SpawnExecuteBlocksStage(s *StageState, stateDB ethdb.Database, chainConfig 
 					return err
 				}
 				if useBatch {
-					if err = batch.CommitAndBegin(context.Background()); err != nil {
-						return err
-					}
+					//if err = batch.CommitAndBegin(context.Background()); err != nil {
+					//	return err
+					//}
 				}
 				if !useExternalTx {
 					if err = tx.CommitAndBegin(context.Background()); err != nil {
