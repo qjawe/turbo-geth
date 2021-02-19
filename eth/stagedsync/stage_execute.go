@@ -154,8 +154,9 @@ func SpawnExecuteBlocksStage(s *StageState, stateDB ethdb.Database, chainConfig 
 	var batch ethdb.DbWithPendingMutations
 	useBatch := !useSilkworm && params.CacheSize == 0
 	if useBatch {
-		batch = tx.NewBatch()
-		defer batch.Rollback()
+		batch = tx
+		//batch = tx.NewBatch()
+		//defer batch.Rollback()
 	}
 	if !useSilkworm && params.CacheSize > 0 {
 		batch = tx
@@ -204,9 +205,9 @@ func SpawnExecuteBlocksStage(s *StageState, stateDB ethdb.Database, chainConfig 
 					return err
 				}
 				if useBatch {
-					if err = batch.CommitAndBegin(context.Background()); err != nil {
-						return err
-					}
+					//if err = batch.CommitAndBegin(context.Background()); err != nil {
+					//	return err
+					//}
 				}
 				if !useExternalTx {
 					if err = tx.CommitAndBegin(context.Background()); err != nil {
@@ -256,9 +257,9 @@ func SpawnExecuteBlocksStage(s *StageState, stateDB ethdb.Database, chainConfig 
 			if err := s.Update(batch, stageProgress); err != nil {
 				return err
 			}
-			if _, err := batch.Commit(); err != nil {
-				return fmt.Errorf("%s: failed to write batch commit: %v", logPrefix, err)
-			}
+			//if _, err := batch.Commit(); err != nil {
+			//	return fmt.Errorf("%s: failed to write batch commit: %v", logPrefix, err)
+			//}
 		}
 		if !useExternalTx {
 			if _, err := tx.Commit(); err != nil {
