@@ -225,6 +225,9 @@ func MultiPut(tx Tx, tuples ...[]byte) error {
 }
 
 func (m *TxDb) BatchSize() int {
+	if m.tx == nil {
+		return 0
+	}
 	return int(m.tx.(*MdbxTx).DirtySize())
 }
 
