@@ -107,8 +107,10 @@ func init() {
 	rootCmd.AddCommand(loopIhCmd)
 
 	withChaindata(loopExecCmd)
+	withLmdbFlags(loopExecCmd)
 	withBatchSize(loopExecCmd)
 	withUnwind(loopExecCmd)
+	withSilkworm(loopExecCmd)
 
 	rootCmd.AddCommand(loopExecCmd)
 }
