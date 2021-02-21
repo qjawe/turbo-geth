@@ -47,7 +47,7 @@ require (
 	github.com/julienschmidt/httprouter v1.2.0
 	github.com/karalabe/usb v0.0.0-20191104083709-911d15fe12a9
 	github.com/kevinburke/go-bindata v3.21.0+incompatible
-	github.com/ledgerwatch/lmdb-go v1.17.5-0.20210217034203-1ef158ac0385
+	github.com/ledgerwatch/lmdb-go v1.17.5-0.20210221043315-1c3e98ec6f67
 	github.com/llgcode/draw2d v0.0.0-20200603164053-19660b984a28
 	github.com/logrusorgru/aurora v2.0.3+incompatible
 	github.com/mattn/go-colorable v0.1.7
