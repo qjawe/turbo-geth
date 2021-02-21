@@ -17,7 +17,7 @@ services:
       - 6060:6060
     environment:
       - DEBUG_SLOW_COMMIT_MS=10
-      - DEBUG_BIG_RW_TX_KB=20000
+      - DEBUG_BIG_RW_TX_KB=200
       - DEBUG_BIG_RO_TX_KB=128
 
   prometheus:
