@@ -1,4 +1,4 @@
-FROM golang:1.15-alpine3.12 as builder
+FROM golang:1.16-buster as builder
 
 ARG git_commit
 ENV GIT_COMMIT=$git_commit
@@ -6,7 +6,7 @@ ENV GIT_COMMIT=$git_commit
 # for linters to avoid warnings. we won't use linters in Docker anyway
 ENV LATEST_COMMIT="undefined"
 
-RUN apk --no-cache add make gcc g++ linux-headers git bash ca-certificates libgcc libstdc++
+#RUN apk --no-cache add make gcc g++ linux-headers git bash ca-certificates libgcc libstdc++
 
 WORKDIR /app
 
@@ -17,9 +17,9 @@ RUN go mod download
 ADD . .
 RUN make all
 
-FROM alpine:3.12
+FROM debian:buster
 
-RUN apk add --no-cache ca-certificates libgcc libstdc++
+#RUN apk add --no-cache ca-certificates libgcc libstdc++
 COPY --from=builder /app/build/bin/* /usr/local/bin/
 
 EXPOSE 8545 8546 30303 30303/udp 8080 9090 6060
