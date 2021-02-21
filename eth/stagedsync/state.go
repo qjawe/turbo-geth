@@ -7,7 +7,6 @@ import (
 	"sort"
 	"time"
 
-	"github.com/c2h5oh/datasize"
 	"github.com/ledgerwatch/turbo-geth/common"
 	"github.com/ledgerwatch/turbo-geth/eth/stagedsync/stages"
 	"github.com/ledgerwatch/turbo-geth/ethdb"
@@ -230,26 +229,26 @@ func printBucketsSize(dbTx ethdb.Getter) error {
 		return err
 	}
 	sort.Strings(buckets)
-	bucketSizes := make([]interface{}, 0, 2*len(buckets))
-	for _, bucket := range buckets {
-		sz, err1 := tx.BucketSize(bucket)
-		if err1 != nil {
-			return err1
-		}
-		if sz < uint64(10*datasize.GB) {
-			continue
-		}
-		bucketSizes = append(bucketSizes, bucket, common.StorageSize(sz))
-	}
-	if len(bucketSizes) == 0 {
-		return nil
-	}
-	sz, err1 := tx.BucketSize("freelist")
-	if err1 != nil {
-		return err1
-	}
-	bucketSizes = append(bucketSizes, "freelist", common.StorageSize(sz))
-	log.Info("Tables", bucketSizes...)
+	//bucketSizes := make([]interface{}, 0, 2*len(buckets))
+	//for _, bucket := range buckets {
+	//	sz, err1 := tx.BucketSize(bucket)
+	//	if err1 != nil {
+	//		return err1
+	//	}
+	//	if sz < uint64(10*datasize.GB) {
+	//		continue
+	//	}
+	//	bucketSizes = append(bucketSizes, bucket, common.StorageSize(sz))
+	//}
+	//if len(bucketSizes) == 0 {
+	//	return nil
+	//}
+	//sz, err1 := tx.BucketSize("freelist")
+	//if err1 != nil {
+	//	return err1
+	//}
+	//bucketSizes = append(bucketSizes, "freelist", common.StorageSize(sz))
+	//log.Info("Tables", bucketSizes...)
 	return nil
 }
 
