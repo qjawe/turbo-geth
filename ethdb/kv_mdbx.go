@@ -118,7 +118,10 @@ func (opts MdbxOpts) Open() (KV, error) {
 		}
 	}
 
-	if err = env.SetGeometry(-1, -1, int(opts.mapSize), int(10*datasize.GB), -1, -1); err != nil {
+	//if err = env.SetGeometry(-1, -1, int(opts.mapSize), int(10*datasize.GB), -1, -1); err != nil {
+	//	return nil, err
+	//}
+	if err = env.SetMapSize(int(opts.mapSize)); err != nil {
 		return nil, err
 	}
 

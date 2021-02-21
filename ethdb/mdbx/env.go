@@ -483,6 +483,14 @@ func (env *Env) SetMaxReaders(size int) error {
 	return operrno("mdbx_env_set_maxreaders", ret)
 }
 
+func (env *Env) SetMapSize(size int) error {
+	if size < 0 {
+		return errNegSize
+	}
+	ret := C.mdbx_env_set_mapsize(env._env, C.size_t(size))
+	return operrno("mdbx_env_set_mapsize", ret)
+}
+
 // MaxReaders returns the maximum number of reader slots for the environment.
 //
 // See mdbx_env_get_maxreaders.
