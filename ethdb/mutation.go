@@ -250,7 +250,6 @@ func (m *mutation) doCommit(tx Tx) error {
 				return false
 			}
 			isEndOfBucket = firstKey == nil
-			fmt.Printf("tbl: %s,%t\n", mi.table, isEndOfBucket)
 		}
 		if isEndOfBucket {
 			if len(mi.value) > 0 {
@@ -265,7 +264,6 @@ func (m *mutation) doCommit(tx Tx) error {
 				return false
 			}
 		} else {
-			fmt.Printf("tbl: %s,%d\n", mi.table, len(mi.key))
 			if err := c.Put(mi.key, mi.value); err != nil {
 				innerErr = err
 				return false
