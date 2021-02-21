@@ -6,7 +6,7 @@ services:
     image: turbo-geth:latest
     build: .
 #    command: tg --database=mdbx --storage-mode="" --metrics --metrics.addr="0.0.0.0" --metrics.port="6060" --private.api.addr="0.0.0.0:9090" --pprof --pprof.addr="0.0.0.0" --pprof.port="6061"
-    command: integration loop_exec --database=mdbx --unwind=500 --chaindata=/root/.local/share/turbogeth/tg/chaindata --pprof --pprof.addr="0.0.0.0" --pprof.port="6060"
+    command: integration loop_exec --database=mdbx --unwind=2000 --chaindata=/root/.local/share/turbogeth/tg/chaindata --pprof --pprof.addr="0.0.0.0" --pprof.port="6060"
     mem_limit: 1g
     mem_swappiness: 0
     volumes:
@@ -18,7 +18,7 @@ services:
     environment:
       - DEBUG_SLOW_COMMIT_MS=10
       - DEBUG_BIG_RW_TX_KB=200
-      - DEBUG_BIG_RO_TX_KB=128
+      - DEBUG_BIG_RO_TX_KB=16
 
   prometheus:
     image: prom/prometheus:v2.24.1

@@ -362,6 +362,8 @@ func loopExec(db ethdb.Database, ctx context.Context, unwind uint64) error {
 	st.EnableStages(stages.Execution)
 	var batchSize datasize.ByteSize
 	must(batchSize.UnmarshalText([]byte(batchSizeStr)))
+	var cacheSize datasize.ByteSize
+	must(cacheSize.UnmarshalText([]byte(cacheSizeStr)))
 
 	from := progress(stages.Execution).BlockNumber
 	to := from + unwind
@@ -372,10 +374,11 @@ func loopExec(db ethdb.Database, ctx context.Context, unwind uint64) error {
 			bc.Config(), cc, bc.GetVMConfig(),
 			ch,
 			stagedsync.ExecuteBlockStageParams{
-				ToBlock:       to, // limit execution to the specified block
-				WriteReceipts: true,
-				BatchSize:     int(batchSize),
-				ChangeSetHook: nil,
+				ToBlock:               to, // limit execution to the specified block
+				WriteReceipts:         true,
+				CacheSize:             int(cacheSize),
+				BatchSize:             int(batchSize),
+				SilkwormExecutionFunc: silkwormExecutionFunc(),
 			}); err != nil {
 			return fmt.Errorf("spawnExecuteBlocksStage: %w", err)
 		}
